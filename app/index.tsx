@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Pressable, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Mail, Lock, ArrowRight } from 'lucide-react-native'; // Ícones modernos
+import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react-native'; // Ícones modernos
 const LogoImg = require('../assets/images/logo.png');
 
 export default function LoginScreen() {
+  const [rememberMe, setRememberMe] = useState(false);// manter conectado
+const [email, setEmail] = useState('');// Estado para o e-mail
+const [password, setPassword] = useState('');// Estado para a senha 
   const [tab, setTab] = useState('Entrar'); // Estado para controlar a barra de navegação
-
+const [secureText, setSecureText] = useState(true); //status do olhinho
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -55,10 +58,35 @@ export default function LoginScreen() {
             <TouchableOpacity><Text style={styles.forgotText}>Esqueceu a senha?</Text></TouchableOpacity>
           </View>
           <View style={styles.inputGroup}>
-            <Lock color="#666" size={20} style={styles.icon} />
-            <TextInput style={styles.input} placeholder="••••••" secureTextEntry placeholderTextColor="#999" />
-          </View>
+  <Lock color="#64748B" size={20} />
+  
+  <TextInput
+    style={styles.input}
+    placeholder="Sua senha"
+    secureTextEntry={secureText} // Se for true, esconde. Se for false, mostra.
+    value={password}
+    onChangeText={setPassword}
+  />
 
+  {/* O ÍCONE DO OLHINHO */}
+  <TouchableOpacity onPress={() => setSecureText(!secureText)}>
+    {secureText ? (
+      <EyeOff color="#64748B" size={20} /> // Ícone de olho cortado
+    ) : (
+      <Eye color="#64748B" size={20} />    // Ícone de olho aberto
+    )}
+  </TouchableOpacity>
+</View>
+ <View style={styles.rememberContainer}>
+  <TouchableOpacity 
+    style={styles.checkbox} 
+    onPress={() => setRememberMe(!rememberMe)}
+  >
+    {/* Se estiver marcado, mostra um fundo azul, se não, fica vazio */}
+    {rememberMe && <View style={styles.checkboxChecked} />}
+  </TouchableOpacity>
+  <Text style={styles.rememberText}>Manter conectado</Text>
+</View>
           {/* BOTÃO ENTRAR COM GRADIENTE */}
           <TouchableOpacity activeOpacity={0.8}>
             <LinearGradient colors={['#0097B2', '#2B58E2']} start={{x: 0, y: 0}} end={{x: 1, y: 0}} style={styles.button}>
@@ -74,8 +102,12 @@ export default function LoginScreen() {
 
         {/* BOTÃO GOOGLE */}
         <TouchableOpacity style={styles.googleButton}>
-           <Text style={styles.googleButtonText}>G  Entrar com o Google</Text>
-        </TouchableOpacity>
+  <Image 
+    source={require('../assets/images/google_logo.png')} // Certifique-se de ter essa imagem!
+    style={styles.googleIcon} 
+  />
+  <Text style={styles.googleButtonText}>Entrar com Google</Text>
+</TouchableOpacity>
 
       </View>
     </SafeAreaView>
@@ -101,9 +133,18 @@ const styles = StyleSheet.create({
   label: { color: '#1E293B', fontWeight: '600', marginBottom: 8 },
   labelRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
   forgotText: { color: '#0097B2', fontSize: 13 },
-  inputGroup: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 15 },
+
+  inputGroup: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  backgroundColor: 'white',
+  borderWidth: 1,
+  borderColor: '#E2E8F0',
+  borderRadius: 12,
+  paddingHorizontal: 15, // Isso já resolve o problema do texto colado na esquerda também!
+},
   icon: { marginRight: 10 },
-  input: { flex: 1, height: 50, color: '#1E293B' },
+  input: { flex: 1, height: 50, color: '#1E293B', marginLeft: 10, paddingHorizontal:15,  },
 
   button: { flexDirection: 'row', height: 55, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 30 },
   buttonText: { color: 'white', fontWeight: 'bold', fontSize: 16, marginRight: 10 },
@@ -112,41 +153,81 @@ const styles = StyleSheet.create({
   divider: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
   dividerText: { color: '#94A3B8', fontSize: 12 },
 
-  googleButton: { width: '100%', height: 55, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: 'white' },
-  googleButtonText: { color: '#1E293B', fontWeight: '600' },
+  googleButton: { 
+    width: '100%', 
+    height: 55, 
+    borderWidth: 1.5, 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+     backgroundColor: 'white',
+     flexDirection: 'row',
+    borderColor: '#000000',    // Cor preta da borda
+    marginTop: 20, },
+  googleButtonText: {
+     color: '#000000',
+    fontWeight: '600',
+    fontSize: 16,
+  },
   header: {
     alignItems: 'center',
     marginBottom: 40,
     marginTop: 20, // Espaço extra no topo, se necessário
   },
   logoContainer: {
-    width: 70,                  // Tamanho total do quadrado
-    height: 70,
-    backgroundColor: '#0097B2', // O azul do Figma
-    borderRadius: 16,           // Cantos arredondados do Figma
+    width: 100,                  // Tamanho total do quadrado
+    height: 100,        // Cantos arredondados do Figma
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 10,
     // Adicione padding para criar o respiro interno para o ícone branco
-    padding: 15,                
-    
-    // Sombra leve para dar profundidade (opcional, estilo iOS/Android)
-    elevation: 4, 
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    padding: 10, 
   },
   logoEstilo: {
-    // Agora que o container tem padding, a imagem pode ocupar 100% 
-    // do espaço interno restante sem tocar nas bordas.
-    width: '100%', 
-    height: '100%',
-  },
+  width: '100%',
+  height: '100%',
+  borderRadius: 10,    // Arredonda a imagem
+  overflow: 'hidden', // Corta a imagem para obedecer o arredondamento
+},
   appName: {
     fontSize: 26,            // Tamanho do Figma
     fontWeight: '800',       // Peso extra bold do Figma
     color: '#000000',        // Preto puro
     letterSpacing: -0.5,     // Aproxima um pouco as letras
+  },
+
+  googleIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 10,           // Espaço entre a logo e o texto
+    resizeMode: 'contain',
+  },
+rememberContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 10,
+    marginBottom: 20, // Espaço antes do botão "Entrar"
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    borderColor: '#0097B2', // Cor azul do seu tema
+    borderRadius: 4,
+    marginRight: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    width: 12,
+    height: 12,
+    backgroundColor: '#0097B2',
+    borderRadius: 2,
+  },
+  rememberText: {
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
