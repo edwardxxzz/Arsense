@@ -56,7 +56,6 @@ export default function LoginScreen() {
             <View style={styles.logoContainer}>
               <Image source={LogoImg} style={styles.logoEstilo} resizeMode="contain" />
             </View>
-            <Text style={styles.appName}>Arsense</Text>
           </View>
 
           <View style={styles.navBar}>
@@ -222,8 +221,8 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   scrollContent: { paddingHorizontal: 25, paddingVertical: 40, alignItems: 'center' },
-  header: { alignItems: 'center', marginBottom: 25 },
-  logoContainer: { width: 90, height: 90, marginBottom: 10 },
+  header: { alignItems: 'center', marginBottom: 0 },
+  logoContainer: { width: 160, height: 200, marginBottom: 0 },
   logoEstilo: { width: '100%', height: '100%', borderRadius: 12 },
   appName: { fontSize: 26, fontWeight: '800', color: '#000' },
   navBar: { flexDirection: 'row', width: '100%', backgroundColor: '#F1F5F9', borderRadius: 14, padding: 6, marginBottom: 25 },
