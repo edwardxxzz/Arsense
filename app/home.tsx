@@ -197,9 +197,9 @@ export default function DashboardScreen() {
       <View style={styles.bottomTab}>
         <TabItem icon={<FileText size={24} color="#2563EB" />} active />
         <TabItem icon={<Building2 size={24} color="#64748B" />} onPress={() => router.push('/ambientes')} />
-        <TabItem icon={<Zap size={24} color="#64748B" />} />
+        <TabItem icon={<Zap size={24} color="#64748B" />} onPress={() => router.push('/perifericos')} />
         <TabItem icon={<Bell size={24} color="#64748B" />} onPress={() => router.push('/notificacao')} />
-        <TabItem icon={<BarChart3 size={24} color="#64748B" />} />
+        <TabItem icon={<BarChart3 size={24} color="#64748B" />} onPress={() => router.push('/relatorios')} />
       </View>
     </SafeAreaView>
   );
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 26, fontWeight: 'bold', color: '#000' },
   headerSubtitle: { fontSize: 14, color: '#64748B' },
   scrollContent: { paddingBottom: 20 },
-  actionRow: { flexDirection: 'row', gap: 12, marginVertical: 20, paddingHorizontal: 20 },
+  actionRow: { flexDirection: 'row', gap: 12, marginVertical: 2, paddingHorizontal: 20 },
   btnSecondary: { flex: 1, height: 45, backgroundColor: '#FFF', borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   btnPrimary: { flex: 1.5, height: 45, backgroundColor: '#2563EB', borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnSecondaryText: { fontWeight: '600', color: '#000' },

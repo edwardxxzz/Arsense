@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     height: 56
   },
   separator: { width: 5 },
-  input: { flex: 1, height: '100%', color: '#1E293B', fontSize: 15, paddingHorizontal:10  },
+  input: { flex: 1, height: '90%', color: '#1E293B', fontSize: 15, paddingHorizontal:10, outlineWidth: 0, outlineColor: "transparent"  },
   inputError: { borderColor: '#ef4444' },
   forgotText: { color: '#0097B2', fontSize: 13, marginTop: 18 },
   mainButton: { flexDirection: 'row', height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 25 },

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,42 +6,36 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   Image,
-  TextInput,
   Modal,
-  Pressable
+  Pressable,
+  Dimensions
 } from 'react-native';
 import { 
   Bell, 
-  Plus, 
-  Search,
-  Thermometer, 
-  Droplets, 
-  Wind, 
-  LayoutGrid, 
+  ChevronDown, 
+  FileText, 
   Building2, 
   Zap, 
   BarChart3, 
+  X, 
+  User, 
+  LogOut, 
   ChevronRight,
-  FileText,
-  X,
-  User,
-  LogOut
+  Thermometer,
+  Droplets,
+  Wind,
+  TrendingUp
 } from 'lucide-react-native';
+import { LineChart } from "react-native-chart-kit";
 import { useRouter } from 'expo-router'; 
 
 const { width } = Dimensions.get('window');
 const LogoImg = require('../assets/images/logo.png'); 
 
-export default function AmbientesScreen() {
+export default function RelatoriosScreen() {
   const router = useRouter();
-  const inputRef = useRef<TextInput>(null);
-  
-  // Estados para o Modal, Busca e o FOCO da borda
   const [isProfileVisible, setIsProfileVisible] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -60,48 +54,70 @@ export default function AmbientesScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        
+        {/* TÍTULO */}
         <View style={styles.headerSection}>
-          <Text style={styles.headerTitle}>Ambientes</Text>
-          <Text style={styles.headerSubtitle}>Gerencie seus ambientes monitorados</Text>
+          <Text style={styles.headerTitle}>Relatórios</Text>
+          <Text style={styles.headerSubtitle}>Análise inteligente dos seus ambientes</Text>
         </View>
 
-        <TouchableOpacity style={styles.btnNewRoom}>
-          <Plus color="#FFF" size={20} />
-          <Text style={styles.btnNewRoomText}>Novo Ambiente</Text>
-        </TouchableOpacity>
+        {/* SELECTORS ROW */}
+        <View style={styles.selectorsRow}>
+          <TouchableOpacity style={styles.dropdown}>
+            <Text style={styles.dropdownText}>Todos os ambientes</Text>
+            <ChevronDown color="#64748B" size={18} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.dropdown}>
+            <Text style={styles.dropdownText}>Últimos 7 dias</Text>
+            <ChevronDown color="#64748B" size={18} />
+          </TouchableOpacity>
+        </View>
 
-        {/* --- BARRA DE BUSCA COM BORDA DINÂMICA (ESTILO LOGIN) --- */}
-        <Pressable 
-          style={[
-            styles.searchContainer, 
-            isFocused && styles.searchContainerFocused // Aplica borda preta ao focar
-          ]} 
-          onPress={() => inputRef.current?.focus()}
-        >
-          <Search color={isFocused ? "#000" : "#64748B"} size={20} />
-          <TextInput 
-            ref={inputRef}
-            style={styles.searchInput}
-            placeholder="Buscar ambiente..."
-            placeholderTextColor="#94A3B8"
-            value={searchText}
-            onChangeText={setSearchText}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
+        {/* ÍNDICE DE CONFORTO */}
+        <View style={styles.cardMain}>
+          <Text style={styles.cardTitle}>Índice de Conforto</Text>
+          <View style={styles.gaugeContainer}>
+             <View style={styles.circleProgress}>
+                <Text style={styles.gaugeValue}>100</Text>
+             </View>
+          </View>
+          <Text style={styles.statusMain}>Excelente</Text>
+          <Text style={styles.statusDetail}>Baseado em temperatura, umidade, CO₂ e qualidade do ar</Text>
+        </View>
+
+        {/* RESUMO DO PERÍODO */}
+        <Text style={styles.sectionTitle}>Resumo do Período</Text>
+        <View style={styles.metricsGrid}>
+          <SummaryCard label="24.5°C" sub="Min: 22.8° | Max: 27.1°" icon={<Thermometer color="#EF4444" size={20}/>} bgColor="#FFF1F2" />
+          <SummaryCard label="43%" sub="Min: 32% | Max: 55%" icon={<Droplets color="#3B82F6" size={20}/>} bgColor="#EFF6FF" />
+          <SummaryCard label="Bom" sub="Qualidade do Ar" icon={<Wind color="#8B5CF6" size={20}/>} bgColor="#F5F3FF" />
+          <SummaryCard label="Estável" sub="Tendência" icon={<TrendingUp color="#10B981" size={20}/>} bgColor="#ECFDF5" />
+        </View>
+
+        {/* GRÁFICO HISTÓRICO */}
+        <View style={styles.cardMain}>
+          <Text style={styles.cardTitle}>Histórico de Temperatura e Umidade</Text>
+          <LineChart
+            data={{
+              labels: ["06:00", "06:00", "07:00", "05:00"],
+              datasets: [
+                { data: [55, 35, 48, 38], color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})` }, // Umidade
+                { data: [25, 28, 24, 26], color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})` }  // Temp
+              ]
+            }}
+            width={width - 80}
+            height={180}
+            chartConfig={chartConfig}
+            bezier
+            style={styles.chart}
           />
-        </Pressable>
-
-        {/* LISTA DE AMBIENTES */}
-        <RoomDetailCard name="Sala 1" type="Salas" temp="23,5°" hum="45%" aqi="45" icon={<LayoutGrid color="#059669" size={22}/>} />
-        <RoomDetailCard name="Escritório 1" type="Escritórios" temp="22,8°" hum="52%" aqi="32" icon={<Building2 color="#059669" size={22}/>} />
-        <RoomDetailCard name="Sala 2" type="Salas" temp="24,0°" hum="48%" aqi="38" icon={<LayoutGrid color="#059669" size={22}/>} />
-        <RoomDetailCard name="Escritório 2" type="Escritórios" temp="24,0°" hum="55%" aqi="32" icon={<Building2 color="#059669" size={22}/>} />
+        </View>
 
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* --- MODAL DE PERFIL (MANTIDO INTACTO) --- */}
-      <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
+      {/* --- MODAL PERFIL --- */}
+      <Modal animationType="fade" transparent visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
           <View style={styles.profileSheet}>
@@ -115,7 +131,6 @@ export default function AmbientesScreen() {
               <Text style={styles.userEmail}>usuario@empresa.com</Text>
             </View>
             <View style={styles.separator} />
-            <Text style={styles.configLabel}>Configurações</Text>
             <TouchableOpacity style={styles.configItem} onPress={() => { setIsProfileVisible(false); router.push('/profile'); }}>
               <View style={styles.configItemLeft}>
                 <View style={styles.configIconBox}><User color="#1E293B" size={22} /></View>
@@ -133,32 +148,23 @@ export default function AmbientesScreen() {
       {/* --- BOTTOM TAB --- */}
       <View style={styles.bottomTab}>
         <TabItem icon={<FileText size={24} color="#64748B" />} onPress={() => router.push('/home')} />
-        <TabItem icon={<Building2 size={24} color="#2563EB" />} active />
+        <TabItem icon={<Building2 size={24} color="#64748B" />} onPress={() => router.push('/ambientes')} />
         <TabItem icon={<Zap size={24} color="#64748B" />} onPress={() => router.push('/perifericos')} />
         <TabItem icon={<Bell size={24} color="#64748B" />} onPress={() => router.push('/notificacao')} />
-        <TabItem icon={<BarChart3 size={24} color="#64748B" />} onPress={() => router.push('/relatorios')} />
+        <TabItem icon={<BarChart3 size={24} color="#2563EB" />} active />
       </View>
     </SafeAreaView>
   );
 }
 
 // --- COMPONENTES AUXILIARES ---
-function RoomDetailCard({ name, type, temp, hum, aqi, icon }: any) {
+function SummaryCard({ label, sub, icon, bgColor }: any) {
   return (
-    <TouchableOpacity style={styles.roomCard}>
-      <View style={styles.roomHeader}>
-        <View style={styles.roomInfoMain}>
-          <View style={styles.roomIconBox}>{icon}</View>
-          <View><Text style={styles.roomName}>{name}</Text><Text style={styles.roomType}>{type}</Text></View>
-        </View>
-        <ChevronRight color="#1E293B" size={24} />
-      </View>
-      <View style={styles.metricsRow}>
-        <View style={styles.metricBox}><Thermometer size={18} color="#EF4444" /><Text style={styles.metricValue}>{temp}</Text><Text style={styles.metricLabel}>Temp</Text></View>
-        <View style={styles.metricBox}><Droplets size={18} color="#3B82F6" /><Text style={styles.metricValue}>{hum}</Text><Text style={styles.metricLabel}>Umidade</Text></View>
-        <View style={styles.metricBox}><Wind size={18} color="#0D9488" /><Text style={styles.metricValue}>{aqi}</Text><Text style={styles.metricLabel}>AQI</Text></View>
-      </View>
-    </TouchableOpacity>
+    <View style={[styles.summaryCard, { backgroundColor: bgColor }]}>
+      {icon}
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={styles.summarySub}>{sub}</Text>
+    </View>
   );
 }
 
@@ -171,7 +177,14 @@ function TabItem({ icon, active, onPress }: any) {
   );
 }
 
-// --- ESTILOS ---
+const chartConfig = {
+  backgroundGradientFrom: "#FFF",
+  backgroundGradientTo: "#FFF",
+  color: (opacity = 1) => `rgba(148, 163, 184, ${opacity})`,
+  strokeWidth: 2,
+  decimalPlaces: 0,
+};
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   topAppBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 5, backgroundColor: '#FFF' },
@@ -181,67 +194,50 @@ const styles = StyleSheet.create({
   avatarCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 15 },
-  headerSection: { marginBottom: 20 },
-  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#000' },
+  headerSection: { marginBottom: 15 },
+  headerTitle: { fontSize: 28, fontWeight: 'bold' },
   headerSubtitle: { fontSize: 14, color: '#64748B' },
-  btnNewRoom: { backgroundColor: '#2563EB', height: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
-  btnNewRoomText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  
+  selectorsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+  dropdown: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+  dropdownText: { fontSize: 13, color: '#1E293B' },
 
-  // ESTILO DA BUSCA COM FOCO NO CONTAINER TODO
-  searchContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F1F5F9', 
-    borderRadius: 12, 
-    paddingHorizontal: 15, 
-    height: 50, 
-    marginBottom: 25, 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0', // Borda padrão cinza
-    gap: 10
-  },
-  searchContainerFocused: {
-    borderColor: '#000', // Borda fica preta ao clicar (engloba a lupa)
-    backgroundColor: '#FFF', // Opcional: fundo branco ao focar, igual telas de login
-  },
-  searchInput: { 
-    flex: 1, 
-    height: '90%',
-    fontSize: 15, 
-    color: '#1E293B', 
-    outlineWidth: 0, 
-    outlineColor: "transparent"
-  },
+  cardMain: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, marginBottom: 20, alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', alignSelf: 'flex-start', marginBottom: 20 },
+  gaugeContainer: { width: 120, height: 120, justifyContent: 'center', alignItems: 'center' },
+  circleProgress: { width: 100, height: 100, borderRadius: 50, borderWidth: 8, borderColor: '#10B981', justifyContent: 'center', alignItems: 'center' },
+  gaugeValue: { fontSize: 28, fontWeight: 'bold', color: '#1E293B' },
+  statusMain: { fontSize: 18, fontWeight: 'bold', color: '#10B981', marginTop: 10 },
+  statusDetail: { fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 5 },
 
-  roomCard: { backgroundColor: '#F0FDF4', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#DCFCE7' },
-  roomHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  roomInfoMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  roomIconBox: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#DCFCE7', justifyContent: 'center', alignItems: 'center' },
-  roomName: { fontSize: 18, fontWeight: 'bold', color: '#1E293B' },
-  roomType: { fontSize: 12, color: '#64748B' },
-  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  metricBox: { flex: 1, backgroundColor: '#FFF', borderRadius: 16, paddingVertical: 12, alignItems: 'center', gap: 4 },
-  metricValue: { fontSize: 16, fontWeight: 'bold', color: '#1E293B' },
-  metricLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
+  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  summaryCard: { width: (width - 50) / 2, padding: 15, borderRadius: 16, gap: 5 },
+  summaryLabel: { fontSize: 18, fontWeight: 'bold', color: '#1E293B' },
+  summarySub: { fontSize: 10, color: '#64748B' },
+
+  chart: { marginVertical: 8, borderRadius: 16 },
+
   bottomTab: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 75, backgroundColor: '#FFF', flexDirection: 'row', borderTopWidth: 1, borderColor: '#E2E8F0', paddingBottom: 15 },
   tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   activeIndicator: { position: 'absolute', bottom: 10, width: 4, height: 4, borderRadius: 2, backgroundColor: '#2563EB' },
+  
+  // MODAL STYLES (MANTIDOS)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
   modalBackdrop: { flex: 0.15 },
   profileSheet: { flex: 0.85, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },
   profileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 },
-  profileTitle: { fontSize: 24, fontWeight: 'bold', color: '#000' },
+  profileTitle: { fontSize: 24, fontWeight: 'bold' },
   profileUserInfo: { alignItems: 'center', marginBottom: 20 },
   largeAvatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
   largeAvatarText: { color: '#FFF', fontSize: 30, fontWeight: 'bold' },
-  userName: { fontSize: 20, fontWeight: 'bold', color: '#000' },
+  userName: { fontSize: 20, fontWeight: 'bold' },
   userEmail: { fontSize: 14, color: '#64748B' },
   separator: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 25 },
-  configLabel: { fontSize: 14, color: '#94A3B8', marginBottom: 20 },
   configItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   configItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   configIconBox: { width: 45, height: 45, backgroundColor: '#F8FAFC', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  configItemTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
+  configItemTitle: { fontSize: 16, fontWeight: '600' },
   configItemSub: { fontSize: 12, color: '#94A3B8' },
   btnSignOut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#EF4444', borderRadius: 15, height: 55 },
   btnSignOutText: { color: '#EF4444', fontWeight: 'bold', fontSize: 16 }
