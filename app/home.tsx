@@ -7,7 +7,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  Image
+  Image,
+  Modal,
+  Pressable
 } from 'react-native';
 import { 
   Bell, 
@@ -22,58 +24,35 @@ import {
   BarChart3, 
   ChevronRight,
   FileText,
+  X,
+  User,
+  LogOut
 } from 'lucide-react-native';
 import { LineChart } from "react-native-chart-kit";
 import Svg, { Circle } from 'react-native-svg';
-// Importação correta para o sistema de arquivos do Expo
 import { useRouter } from 'expo-router'; 
 
 const { width } = Dimensions.get('window');
 const LogoImg = require('../assets/images/logo.png'); 
 
-// --- COMPONENTE DO ARCO CUSTOMIZADO (CORRIGIDO) ---
+// --- COMPONENTE DO ARCO CUSTOMIZADO ---
 function AqiGauge({ value }: { value: number }) {
   const size = 180;
   const strokeWidth = 15;
   const radius = (size - strokeWidth) / 2;
   const center = size / 2;
   const circumference = radius * 2 * Math.PI;
-  
-  // 1. O trilho (fundo) ocupa 75% do círculo
   const totalArcLength = circumference * 0.75; 
   const gap = circumference - totalArcLength;
-  
-  // 2. O preenchimento verde cresce dentro desses 75%
   const percentage = Math.min(value / 500, 1);
   const progressLength = totalArcLength * percentage;
 
   return (
     <View style={styles.gaugeContainer}>
       <Svg width={size} height={size} style={{ transform: [{ rotate: '135deg' }] }}>
-        {/* Fundo do Arco (Cinza) - Sempre 75% */}
-        <Circle
-          cx={center}
-          cy={center}
-          r={radius}
-          stroke="#F1F5F9"
-          strokeWidth={strokeWidth}
-          strokeDasharray={`${totalArcLength} ${gap}`}
-          strokeLinecap="round"
-          fill="none"
-        />
-        {/* Preenchimento do Arco (Verde) - Proporcional ao valor */}
-        <Circle
-          cx={center}
-          cy={center}
-          r={radius}
-          stroke="#84CC16"
-          strokeWidth={strokeWidth}
-          strokeDasharray={`${progressLength} ${circumference}`}
-          strokeLinecap="round"
-          fill="none"
-        />
+        <Circle cx={center} cy={center} r={radius} stroke="#F1F5F9" strokeWidth={strokeWidth} strokeDasharray={`${totalArcLength} ${gap}`} strokeLinecap="round" fill="none" />
+        <Circle cx={center} cy={center} r={radius} stroke="#84CC16" strokeWidth={strokeWidth} strokeDasharray={`${progressLength} ${circumference}`} strokeLinecap="round" fill="none" />
       </Svg>
-      
       <View style={styles.gaugeTextOverlay}>
         <Text style={styles.gaugeValue}>{value}</Text>
         <Text style={styles.gaugeLabel}>AQI</Text>
@@ -85,8 +64,8 @@ function AqiGauge({ value }: { value: number }) {
 export default function DashboardScreen() {
   const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isProfileVisible, setIsProfileVisible] = useState(false);
 
-  // Lógica para o botão atualizar (reset do componente)
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
   };
@@ -102,17 +81,17 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container} key={refreshKey}>
+      
+      {/* --- TOP BAR --- */}
       <View style={styles.topAppBar}>
         <Image source={LogoImg} style={styles.topLogo} resizeMode="contain" />
         <View style={styles.headerIcons}>
-          {/* LINK: Notificação (Sino superior) */}
-          <TouchableOpacity 
-            style={styles.iconBadge} 
-            onPress={() => router.push('/notificacao')}
-          >
+          <TouchableOpacity style={styles.iconBadge} onPress={() => router.push('/notificacao')}>
             <Bell color="#000" size={24} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.avatarCircle}><Text style={styles.avatarText}>US</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.avatarCircle} onPress={() => setIsProfileVisible(true)}>
+            <Text style={styles.avatarText}>US</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -123,7 +102,6 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.actionRow}>
-          {/* Lógica: Botão Atualizar */}
           <TouchableOpacity style={styles.btnSecondary} onPress={handleRefresh}>
             <RefreshCw color="#000" size={18} />
             <Text style={styles.btnSecondaryText}>Atualizar</Text>
@@ -138,6 +116,7 @@ export default function DashboardScreen() {
           <MetricCard label="Ambientes Ativos" value="4" unit="Locais" icon={<Building2 color="#FFF" size={32} />} iconBg="#2563EB" />
         </View>
 
+        {/* --- GRÁFICO --- */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Histórico das Últimas Horas</Text>
           <LineChart
@@ -151,6 +130,7 @@ export default function DashboardScreen() {
           />
         </View>
 
+        {/* --- AQI GAUGE --- */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitleCenter}>Qualidade do Ar Geral</Text>
           <AqiGauge value={64} />
@@ -160,7 +140,6 @@ export default function DashboardScreen() {
 
         <View style={styles.listHeader}>
           <Text style={styles.sectionTitle}>Seus Ambientes</Text>
-          {/* LINK: Ver Todos (Leva para Ambientes) */}
           <TouchableOpacity onPress={() => router.push('/ambientes')}>
             <Text style={styles.viewAll}>Ver Todos →</Text>
           </TouchableOpacity>
@@ -172,13 +151,53 @@ export default function DashboardScreen() {
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* BARRA DE NAVEGAÇÃO INFERIOR */}
+      {/* --- MODAL DE PERFIL --- */}
+      <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
+          <View style={styles.profileSheet}>
+            <View style={styles.profileHeader}>
+              <Text style={styles.profileTitle}>Perfil</Text>
+              <TouchableOpacity onPress={() => setIsProfileVisible(false)}>
+                <X color="#94A3B8" size={30} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.profileUserInfo}>
+              <View style={styles.largeAvatar}><Text style={styles.largeAvatarText}>US</Text></View>
+              <Text style={styles.userName}>Usuário</Text>
+              <Text style={styles.userEmail}>usuario@empresa.com</Text>
+            </View>
+
+            <View style={styles.separator} />
+            <Text style={styles.configLabel}>Configurações</Text>
+            
+            {/* BOTÃO MINHA CONTA */}
+            <TouchableOpacity style={styles.configItem} onPress={() => { setIsProfileVisible(false); router.push('/profile'); }}>
+              <View style={styles.configItemLeft}>
+                <View style={styles.configIconBox}><User color="#1E293B" size={22} /></View>
+                <View>
+                  <Text style={styles.configItemTitle}>Minha Conta</Text>
+                  <Text style={styles.configItemSub}>Dados Pessoais</Text>
+                </View>
+              </View>
+              <ChevronRight color="#1E293B" size={20} />
+            </TouchableOpacity>
+
+            {/* BOTÃO SAIR (ABAIXO DE MINHA CONTA) */}
+            <TouchableOpacity style={[styles.btnSignOut, { marginTop: 25 }]} onPress={() => { setIsProfileVisible(false); router.replace('/'); }}>
+              <LogOut color="#EF4444" size={20} />
+              <Text style={styles.btnSignOutText}>Sair da conta</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- BOTTOM TAB --- */}
       <View style={styles.bottomTab}>
         <TabItem icon={<FileText size={24} color="#2563EB" />} active />
-        {/* LINK: Segundo item (Prédio) -> Ambientes */}
         <TabItem icon={<Building2 size={24} color="#64748B" />} onPress={() => router.push('/ambientes')} />
         <TabItem icon={<Zap size={24} color="#64748B" />} />
-        {/* LINK: Quarto item (Sino) -> Notificação */}
         <TabItem icon={<Bell size={24} color="#64748B" />} onPress={() => router.push('/notificacao')} />
         <TabItem icon={<BarChart3 size={24} color="#64748B" />} />
       </View>
@@ -238,7 +257,26 @@ const styles = StyleSheet.create({
   roomMetricLabel: { fontSize: 11, color: '#94A3B8' },
   bottomTab: { position: 'absolute', bottom: 0, width: '100%', height: 75, backgroundColor: '#FFF', flexDirection: 'row', borderTopWidth: 1, borderColor: '#E2E8F0', paddingBottom: 15 },
   tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  activeIndicator: { position: 'absolute', bottom: 10, width: 4, height: 4, borderRadius: 2, backgroundColor: '#2563EB' }
+  activeIndicator: { position: 'absolute', bottom: 10, width: 4, height: 4, borderRadius: 2, backgroundColor: '#2563EB' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
+  modalBackdrop: { flex: 0.15 },
+  profileSheet: { flex: 0.85, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },
+  profileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 },
+  profileTitle: { fontSize: 24, fontWeight: 'bold', color: '#000' },
+  profileUserInfo: { alignItems: 'center', marginBottom: 20 },
+  largeAvatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#3B82F6', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  largeAvatarText: { color: '#FFF', fontSize: 30, fontWeight: 'bold' },
+  userName: { fontSize: 20, fontWeight: 'bold', color: '#000' },
+  userEmail: { fontSize: 14, color: '#64748B' },
+  separator: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 25 },
+  configLabel: { fontSize: 14, color: '#94A3B8', marginBottom: 20 },
+  configItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  configItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  configIconBox: { width: 45, height: 45, backgroundColor: '#F8FAFC', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  configItemTitle: { fontSize: 16, fontWeight: '600', color: '#000' },
+  configItemSub: { fontSize: 12, color: '#94A3B8' },
+  btnSignOut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#EF4444', borderRadius: 15, height: 55 },
+  btnSignOutText: { color: '#EF4444', fontWeight: 'bold', fontSize: 16 }
 });
 
 // --- COMPONENTES AUXILIARES ---
@@ -249,9 +287,7 @@ function MetricCard({ label, value, unit, trend, trendUp, icon, iconBg }: any) {
         <View style={[styles.metricIcon, {backgroundColor: iconBg}]}>{icon}</View>
         {trend && (
           <View style={[styles.trendBadge, {backgroundColor: trendUp ? '#D1FAE5' : '#FEE2E2'}]}>
-            <Text style={[styles.trendText, {color: trendUp ? '#059669' : '#DC2626'}]}>
-               {trendUp ? '↗' : '↘'} {trend}
-            </Text>
+            <Text style={[styles.trendText, {color: trendUp ? '#059669' : '#DC2626'}]}>{trendUp ? '↗' : '↘'} {trend}</Text>
           </View>
         )}
       </View>
