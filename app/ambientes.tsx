@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,8 @@ import {
   Image,
   TextInput,
   Modal,
-  Pressable
+  Pressable,
+  Alert
 } from 'react-native';
 import { 
   Bell, 
@@ -31,22 +32,118 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router'; 
 
+// --- INCLUSÃO FIREBASE ---
+import { auth, database } from '../services/firebaseConfig';
+import { ref, onValue } from "firebase/database";
+import { signOut } from "firebase/auth";
+
 const { width } = Dimensions.get('window');
 const LogoImg = require('../assets/images/logo.png'); 
+
+interface AmbienteData {
+  id: string;
+  nomeExibicao: string;
+  temperatura: string;
+  umidade: string;
+  co2: string;
+}
 
 export default function AmbientesScreen() {
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
   
-  // Estados para o Modal, Busca e o FOCO da borda
   const [isProfileVisible, setIsProfileVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
+  
+  const [ambientes, setAmbientes] = useState<AmbienteData[]>([]);
+
+  const [userData, setUserData] = useState({ 
+    nome: 'Carregando...', 
+    email: '', 
+    iniciais: '..' 
+  });
+
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      const empresasRef = ref(database, 'empresas');
+      
+      onValue(empresasRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          let nomeEncontrado = user.displayName || "Usuário";
+          let listaAmbientes: AmbienteData[] = [];
+          
+          // Percorre as empresas para achar a do usuário
+          Object.keys(data).forEach(empresaKey => {
+            const empresaNode = data[empresaKey];
+            const usuarios = empresaNode.usuarios;
+
+            if (usuarios) {
+              const usuarioPertence = Object.values(usuarios).some((u: any) => u.uid === user.uid);
+              
+              if (usuarioPertence) {
+                // Captura o nome correto do usuário para o perfil
+                Object.keys(usuarios).forEach(uk => {
+                  if (usuarios[uk].uid === user.uid) {
+                    nomeEncontrado = uk.replace(/_/g, ' ');
+                  }
+                });
+
+                // --- LÓGICA CORRIGIDA: "ambientes" com "a" minúsculo ---
+                const ambientesNode = empresaNode.ambientes; 
+
+                if (ambientesNode) {
+                  Object.keys(ambientesNode).forEach(ambKey => {
+                    // ambKey é "Ambiente_1", "Sala_de_Reuniao", etc.
+                    const sensores = ambientesNode[ambKey].sensores;
+
+                    listaAmbientes.push({
+                      id: ambKey,
+                      nomeExibicao: ambKey.replace(/_/g, ' '),
+                      // Verifica sensores com fallback para '--'
+                      temperatura: sensores?.Temperatura !== undefined ? `${sensores.Temperatura}°` : '--',
+                      umidade: sensores?.Umidade !== undefined ? `${sensores.Umidade}%` : '--',
+                      co2: sensores?.CO2 !== undefined ? String(sensores.CO2) : '--'
+                    });
+                  });
+                }
+              }
+            }
+          });
+
+          // Atualiza o perfil e a lista de cards
+          const iniciais = nomeEncontrado.split(' ').filter(n => n.length > 0).map(n => n[0]).join('').slice(0, 2).toUpperCase();
+          setUserData({
+            nome: nomeEncontrado,
+            email: user.email || "",
+            iniciais: iniciais || "US"
+          });
+          
+          setAmbientes(listaAmbientes);
+        }
+      });
+    }
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsProfileVisible(false);
+      router.replace('/');
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível sair.");
+    }
+  };
+
+  const ambientesFiltrados = ambientes.filter(amb => 
+    amb.nomeExibicao.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* --- TOP BAR --- */}
       <View style={styles.topAppBar}>
         <Image source={LogoImg} style={styles.topLogo} resizeMode="contain" />
         <View style={styles.headerIcons}>
@@ -54,7 +151,7 @@ export default function AmbientesScreen() {
             <Bell color="#000" size={24} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.avatarCircle} onPress={() => setIsProfileVisible(true)}>
-            <Text style={styles.avatarText}>US</Text>
+            <Text style={styles.avatarText}>{userData.iniciais}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -65,16 +162,16 @@ export default function AmbientesScreen() {
           <Text style={styles.headerSubtitle}>Gerencie seus ambientes monitorados</Text>
         </View>
 
-        <TouchableOpacity style={styles.btnNewRoom}>
+        {/* --- BOTÃO NOVO AMBIENTE REDIRECIONANDO --- */}
+        <TouchableOpacity style={styles.btnNewRoom} onPress={() => router.push('/add_ambiente')}>
           <Plus color="#FFF" size={20} />
           <Text style={styles.btnNewRoomText}>Novo Ambiente</Text>
         </TouchableOpacity>
 
-        {/* --- BARRA DE BUSCA COM BORDA DINÂMICA (ESTILO LOGIN) --- */}
         <Pressable 
           style={[
             styles.searchContainer, 
-            isFocused && styles.searchContainerFocused // Aplica borda preta ao focar
+            isFocused && styles.searchContainerFocused 
           ]} 
           onPress={() => inputRef.current?.focus()}
         >
@@ -91,16 +188,29 @@ export default function AmbientesScreen() {
           />
         </Pressable>
 
-        {/* LISTA DE AMBIENTES */}
-        <RoomDetailCard name="Sala 1" type="Salas" temp="23,5°" hum="45%" aqi="45" icon={<LayoutGrid color="#059669" size={22}/>} />
-        <RoomDetailCard name="Escritório 1" type="Escritórios" temp="22,8°" hum="52%" aqi="32" icon={<Building2 color="#059669" size={22}/>} />
-        <RoomDetailCard name="Sala 2" type="Salas" temp="24,0°" hum="48%" aqi="38" icon={<LayoutGrid color="#059669" size={22}/>} />
-        <RoomDetailCard name="Escritório 2" type="Escritórios" temp="24,0°" hum="55%" aqi="32" icon={<Building2 color="#059669" size={22}/>} />
+        {ambientesFiltrados.length > 0 ? (
+          ambientesFiltrados.map((item) => (
+            <RoomDetailCard 
+              key={item.id}
+              name={item.nomeExibicao} 
+              type="Monitorado" 
+              temp={item.temperatura} 
+              hum={item.umidade} 
+              aqi={item.co2} 
+              icon={<LayoutGrid color="#059669" size={22}/>} 
+              onPress={() => router.push('/ambiente')}
+            />
+          ))
+        ) : (
+          <View style={{ alignItems: 'center', marginTop: 40 }}>
+            <Text style={{ color: '#94A3B8' }}>Nenhum ambiente encontrado.</Text>
+          </View>
+        )}
 
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* --- MODAL DE PERFIL (MANTIDO INTACTO) --- */}
+      {/* --- MODAL PERFIL --- */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -109,10 +219,11 @@ export default function AmbientesScreen() {
               <Text style={styles.profileTitle}>Perfil</Text>
               <TouchableOpacity onPress={() => setIsProfileVisible(false)}><X color="#94A3B8" size={30} /></TouchableOpacity>
             </View>
+            <View style={{ display: 'none' }}>Ignorar div acidental do sistema</View>
             <View style={styles.profileUserInfo}>
-              <View style={styles.largeAvatar}><Text style={styles.largeAvatarText}>US</Text></View>
-              <Text style={styles.userName}>Usuário</Text>
-              <Text style={styles.userEmail}>usuario@empresa.com</Text>
+              <View style={styles.largeAvatar}><Text style={styles.largeAvatarText}>{userData.iniciais}</Text></View>
+              <Text style={styles.userName}>{userData.nome}</Text>
+              <Text style={styles.userEmail}>{userData.email}</Text>
             </View>
             <View style={styles.separator} />
             <Text style={styles.configLabel}>Configurações</Text>
@@ -123,14 +234,13 @@ export default function AmbientesScreen() {
               </View>
               <ChevronRight color="#1E293B" size={20} />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnSignOut, { marginTop: 25 }]} onPress={() => { setIsProfileVisible(false); router.replace('/'); }}>
+            <TouchableOpacity style={[styles.btnSignOut, { marginTop: 25 }]} onPress={handleLogout}>
               <LogOut color="#EF4444" size={20} /><Text style={styles.btnSignOutText}>Sair da conta</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* --- BOTTOM TAB --- */}
       <View style={styles.bottomTab}>
         <TabItem icon={<FileText size={24} color="#64748B" />} onPress={() => router.push('/home')} />
         <TabItem icon={<Building2 size={24} color="#2563EB" />} active />
@@ -142,10 +252,9 @@ export default function AmbientesScreen() {
   );
 }
 
-// --- COMPONENTES AUXILIARES ---
-function RoomDetailCard({ name, type, temp, hum, aqi, icon }: any) {
+function RoomDetailCard({ name, type, temp, hum, aqi, icon, onPress }: any) {
   return (
-    <TouchableOpacity style={styles.roomCard}>
+    <TouchableOpacity style={styles.roomCard} onPress={onPress}>
       <View style={styles.roomHeader}>
         <View style={styles.roomInfoMain}>
           <View style={styles.roomIconBox}>{icon}</View>
@@ -156,7 +265,7 @@ function RoomDetailCard({ name, type, temp, hum, aqi, icon }: any) {
       <View style={styles.metricsRow}>
         <View style={styles.metricBox}><Thermometer size={18} color="#EF4444" /><Text style={styles.metricValue}>{temp}</Text><Text style={styles.metricLabel}>Temp</Text></View>
         <View style={styles.metricBox}><Droplets size={18} color="#3B82F6" /><Text style={styles.metricValue}>{hum}</Text><Text style={styles.metricLabel}>Umidade</Text></View>
-        <View style={styles.metricBox}><Wind size={18} color="#0D9488" /><Text style={styles.metricValue}>{aqi}</Text><Text style={styles.metricLabel}>AQI</Text></View>
+        <View style={styles.metricBox}><Wind size={18} color="#0D9488" /><Text style={styles.metricValue}>{aqi}</Text><Text style={styles.metricLabel}>CO₂</Text></View>
       </View>
     </TouchableOpacity>
   );
@@ -171,7 +280,6 @@ function TabItem({ icon, active, onPress }: any) {
   );
 }
 
-// --- ESTILOS ---
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   topAppBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 5, backgroundColor: '#FFF' },
@@ -186,33 +294,9 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 14, color: '#64748B' },
   btnNewRoom: { backgroundColor: '#2563EB', height: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
   btnNewRoomText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-
-  // ESTILO DA BUSCA COM FOCO NO CONTAINER TODO
-  searchContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F1F5F9', 
-    borderRadius: 12, 
-    paddingHorizontal: 15, 
-    height: 50, 
-    marginBottom: 25, 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0', // Borda padrão cinza
-    gap: 10
-  },
-  searchContainerFocused: {
-    borderColor: '#000', // Borda fica preta ao clicar (engloba a lupa)
-    backgroundColor: '#FFF', // Opcional: fundo branco ao focar, igual telas de login
-  },
-  searchInput: { 
-    flex: 1, 
-    height: '90%',
-    fontSize: 15, 
-    color: '#1E293B', 
-    outlineWidth: 0, 
-    outlineColor: "transparent"
-  },
-
+  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', borderRadius: 12, paddingHorizontal: 15, height: 50, marginBottom: 25, borderWidth: 1, borderColor: '#E2E8F0', gap: 10 },
+  searchContainerFocused: { borderColor: '#000', backgroundColor: '#FFF' },
+  searchInput: { flex: 1, height: '90%', fontSize: 15, color: '#1E293B' },
   roomCard: { backgroundColor: '#F0FDF4', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#DCFCE7' },
   roomHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   roomInfoMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },

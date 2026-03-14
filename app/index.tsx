@@ -62,7 +62,7 @@ export default function LoginScreen() {
     }
   };
 
-  // --- LÓGICA DE CADASTRO COMPLETA ---
+  // --- LÓGICA DE CADASTRO ---
   const handleSignUp = async () => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -74,25 +74,17 @@ export default function LoginScreen() {
       const empresaRef = ref(database, `empresas/${safeCompany}`);
       const snapshot = await get(empresaRef);
 
-      // 1. Se a empresa não existe, cria a estrutura de Ambientes, Sensores e Periféricos
       if (!snapshot.exists()) {
         await set(ref(database, `empresas/${safeCompany}/ambientes/Ambiente_1`), {
-          sensores: {
-            co2: 0,
-            temperatura: 0,
-            umidade: 0
-          },
+          sensores: { co2: 0, temperatura: 0, umidade: 0 },
           perifericos: {
             ar_condicionado: {
-              geral: {
-                status: false // Começa como desligado (false)
-              }
+              geral: { status: false }
             }
           }
         });
       }
 
-      // 2. Salva o usuário dentro da empresa
       await set(ref(database, `empresas/${safeCompany}/usuarios/${safeUser}`), {
         email: email.toLowerCase().trim(),
         senha: password, 
@@ -157,14 +149,14 @@ export default function LoginScreen() {
                 <View style={[styles.inputGroup, (hasLoginError || (email.length > 0 && !isEmailValid(email))) && styles.inputError]}>
                   <Mail color="#000" size={20} />
                   <View style={styles.separator} />
-                  <TextInput style={styles.input} placeholder="seu@email.com" value={email} onChangeText={(text) => { setEmail(text); setHasLoginError(false); }} autoCapitalize="none" placeholderTextColor="#94A3B8" />
+                  <TextInput style={styles.input} placeholder="seu@email.com" value={email} onChangeText={(text) => { setEmail(text); setHasLoginError(false); }} autoCapitalize="none" placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} />
                 </View>
 
                 <View style={styles.labelRow}><Text style={styles.label}>Senha</Text><TouchableOpacity onPress={() => setTab('Recuperar')}><Text style={styles.forgotText}>Esqueceu a senha?</Text></TouchableOpacity></View>
                 <View style={[styles.inputGroup, hasLoginError && styles.inputError]}>
                   <Lock color="#000" size={20} />
                   <View style={styles.separator} />
-                  <TextInput style={styles.input} placeholder="Sua senha" secureTextEntry={secureText} value={password} onChangeText={(text) => { setPassword(text); setHasLoginError(false); }} placeholderTextColor="#94A3B8" />
+                  <TextInput style={styles.input} placeholder="Sua senha" secureTextEntry={secureText} value={password} onChangeText={(text) => { setPassword(text); setHasLoginError(false); }} placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} />
                   <TouchableOpacity onPress={() => setSecureText(!secureText)}>
                     {secureText ? <EyeOff color="#64748B" size={20} /> : <Eye color="#64748B" size={20} />}
                   </TouchableOpacity>
@@ -198,11 +190,11 @@ export default function LoginScreen() {
                 {cadStep === 1 ? (
                   <>
                     <Text style={styles.label}>Nome Completo</Text>
-                    <View style={styles.inputGroup}><User color="#000" size={20} /><View style={styles.separator} /><TextInput style={styles.input} placeholder="Seu nome" value={fullName} onChangeText={setFullName} placeholderTextColor="#94A3B8" /></View>
+                    <View style={styles.inputGroup}><User color="#000" size={20} /><View style={styles.separator} /><TextInput style={styles.input} placeholder="Seu nome" value={fullName} onChangeText={setFullName} placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} /></View>
                     <Text style={styles.label}>Email Corporativo</Text>
-                    <View style={[styles.inputGroup, email.length > 0 && !isEmailValid(email) && styles.inputError]}><Mail color="#000" size={20} /><View style={styles.separator} /><TextInput style={styles.input} placeholder="seu@empresa.com" value={email} onChangeText={setEmail} autoCapitalize="none" placeholderTextColor="#94A3B8" /></View>
+                    <View style={[styles.inputGroup, email.length > 0 && !isEmailValid(email) && styles.inputError]}><Mail color="#000" size={20} /><View style={styles.separator} /><TextInput style={styles.input} placeholder="seu@empresa.com" value={email} onChangeText={setEmail} autoCapitalize="none" placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} /></View>
                     <Text style={styles.label}>Empresa</Text>
-                    <View style={styles.inputGroup}><Building color="#000" size={20} /><View style={styles.separator} /><TextInput style={styles.input} placeholder="Nome da empresa" value={company} onChangeText={setCompany} placeholderTextColor="#94A3B8" /></View>
+                    <View style={styles.inputGroup}><Building color="#000" size={20} /><View style={styles.separator} /><TextInput style={styles.input} placeholder="Nome da empresa" value={company} onChangeText={setCompany} placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} /></View>
                     
                     <TouchableOpacity disabled={!isStep1Complete} onPress={() => setCadStep(2)}>
                       <LinearGradient colors={['#0097B2', '#2B58E2']} start={{x:0, y:0}} end={{x:1, y:0}} style={[styles.mainButton, !isStep1Complete && {opacity: 0.5}]}>
@@ -216,24 +208,37 @@ export default function LoginScreen() {
                     <Text style={styles.label}>Senha</Text>
                     <View style={styles.inputGroup}>
                       <Lock color="#000" size={20} /><View style={styles.separator} />
-                      <TextInput style={styles.input} placeholder="Mínimo 8 caracteres" secureTextEntry={secureText} value={password} onChangeText={setPassword} placeholderTextColor="#94A3B8" />
+                      <TextInput style={styles.input} placeholder="Mínimo 8 caracteres" secureTextEntry={secureText} value={password} onChangeText={setPassword} placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} />
                       <TouchableOpacity onPress={() => setSecureText(!secureText)}>{secureText ? <EyeOff color="#64748B" size={20} /> : <Eye color="#64748B" size={20} />}</TouchableOpacity>
                     </View>
                     <View style={styles.strengthContainer}>{[1, 2, 3, 4].map((i) => (<View key={i} style={[styles.strengthBar, password.length >= i * 2 && { backgroundColor: '#0097B2' }]} />))}</View>
                     <Text style={styles.label}>Confirma Senha</Text>
                     <View style={[styles.inputGroup, confirmPassword.length > 0 && password !== confirmPassword && styles.inputError]}>
                       <Lock color="#000" size={20} /><View style={styles.separator} />
-                      <TextInput style={styles.input} placeholder="Digite novamente" secureTextEntry={secureTextConfirm} value={confirmPassword} onChangeText={setConfirmPassword} placeholderTextColor="#94A3B8" />
+                      <TextInput style={styles.input} placeholder="Digite novamente" secureTextEntry={secureTextConfirm} value={confirmPassword} onChangeText={setConfirmPassword} placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} />
                       <TouchableOpacity onPress={() => setSecureTextConfirm(!secureTextConfirm)}>{secureTextConfirm ? <EyeOff color="#64748B" size={20} /> : <Eye color="#64748B" size={20} />}</TouchableOpacity>
                     </View>
                     <View style={styles.termsRow}>
                       <TouchableOpacity style={styles.checkboxSmall} onPress={() => setAgreeTerms(!agreeTerms)}>{agreeTerms && <View style={styles.checkboxCheckedSmall} />}</TouchableOpacity>
                       <Text style={styles.termsText}>Concordo com os <Text style={styles.linkBlue}>Termos de Uso</Text> e <Text style={styles.linkBlue}>Política de Privacidade</Text></Text>
                     </View>
+                    
                     <View style={styles.dualButtons}>
-                      <TouchableOpacity style={styles.btnBack} onPress={() => setCadStep(1)}><Text style={styles.btnBackText}>Voltar</Text></TouchableOpacity>
-                      <TouchableOpacity style={styles.btnFinish} disabled={!isStep2Complete} onPress={handleSignUp}>
-                        <LinearGradient colors={['#0097B2', '#2B58E2']} style={[styles.buttonGradient, !isStep2Complete && { opacity: 0.5 }]}>
+                      <TouchableOpacity style={styles.btnBack} onPress={() => setCadStep(1)}>
+                        <Text style={styles.btnBackText}>Voltar</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={styles.btnFinish} 
+                        disabled={!isStep2Complete} 
+                        onPress={handleSignUp}
+                      >
+                        <LinearGradient 
+                          colors={['#0097B2', '#2B58E2']} 
+                          start={{x:0, y:0}} 
+                          end={{x:1, y:0}}
+                          style={[styles.buttonGradient, !isStep2Complete && { opacity: 0.5 }]}
+                        >
                           <Text style={styles.buttonText}>Criar conta</Text>
                           <ArrowRight color="white" size={18} />
                         </LinearGradient>
@@ -249,7 +254,7 @@ export default function LoginScreen() {
                 <Text style={styles.label}>Email</Text>
                 <View style={[styles.inputGroup, email.length > 0 && !isEmailValid(email) && styles.inputError]}>
                   <Mail color="#000" size={20} /><View style={styles.separator} />
-                  <TextInput style={styles.input} placeholder="seu@email.com" value={email} onChangeText={setEmail} autoCapitalize="none" placeholderTextColor="#94A3B8" />
+                  <TextInput style={styles.input} placeholder="seu@email.com" value={email} onChangeText={setEmail} autoCapitalize="none" placeholderTextColor="#94A3B8" {...({ outlineStyle: 'none' } as any)} />
                 </View>
                 <TouchableOpacity disabled={!isEmailValid(email)} style={{ marginTop: 30 }} onPress={handleRecovery}>
                   <LinearGradient colors={['#0097B2', '#2B58E2']} start={{x:0, y:0}} end={{x:1, y:0}} style={[styles.mainButton, !isEmailValid(email) && {opacity: 0.5}]}>
@@ -290,7 +295,6 @@ const styles = StyleSheet.create({
   inputError: { borderColor: '#ef4444' },
   forgotText: { color: '#0097B2', fontSize: 13, marginTop: 18 },
   mainButton: { flexDirection: 'row', height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginTop: 25 },
-  buttonGradient: { flexDirection: 'row', width: '100%', height: '100%', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   buttonText: { color: 'white', fontWeight: 'bold', fontSize: 16, marginRight: 10 },
   dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 30 },
   divider: { flex: 1, height: 1, backgroundColor: '#E2E8F0' },
@@ -311,10 +315,40 @@ const styles = StyleSheet.create({
   checkboxCheckedSmall: { width: 10, height: 10, backgroundColor: '#0097B2' },
   termsText: { fontSize: 12, color: '#64748B', marginLeft: 10, flex: 1 },
   linkBlue: { color: '#0097B2', fontWeight: '600' },
-  dualButtons: { flexDirection: 'row', gap: 12, marginTop: 25 },
-  btnBack: { flex: 1, height: 56, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  
+  // ÁREA DOS BOTÕES DUAIS - AJUSTADA CONFORME PROTOTIPAÇÃO
+  dualButtons: { 
+    flexDirection: 'row', 
+    gap: 12, 
+    marginTop: 25, 
+    width: '100%', 
+    height: 56 
+  },
+  btnBack: { 
+    flex: 1, 
+    height: '100%', 
+    borderWidth: 1, 
+    borderColor: '#E2E8F0', 
+    borderRadius: 12, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: '#FFF' 
+  },
   btnBackText: { fontWeight: '600', color: '#64748B' },
-  btnFinish: { flex: 1.8 },
+  btnFinish: { 
+    flex: 1.8, 
+    height: '100%',
+    borderRadius: 12,
+    overflow: 'hidden' // Garante que o gradiente não saia dos cantos arredondados
+  },
+  buttonGradient: { 
+    flexDirection: 'row', 
+    width: '100%', 
+    height: '100%', 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  
   rememberContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 15 },
   checkbox: { width: 20, height: 20, borderWidth: 2, borderColor: '#0097B2', borderRadius: 5, marginRight: 10, justifyContent: 'center', alignItems: 'center' },
   checkboxChecked: { width: 12, height: 12, backgroundColor: '#0097B2', borderRadius: 2 },

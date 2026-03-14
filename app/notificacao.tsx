@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,8 @@ import {
   TouchableOpacity,
   Image,
   Modal,
-  Pressable
+  Pressable,
+  Alert
 } from 'react-native';
 import { 
   Bell, 
@@ -26,14 +27,75 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router'; 
 
+// --- INCLUSÃO FIREBASE ---
+import { auth, database } from '../services/firebaseConfig';
+import { ref, onValue } from "firebase/database";
+import { signOut } from "firebase/auth";
+
 const LogoImg = require('../assets/images/logo.png'); 
 
 export default function NotificacaoScreen() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('Todos'); // Estado para controlar a aba ativa
+  const [activeTab, setActiveTab] = useState('Todos'); 
   const [isProfileVisible, setIsProfileVisible] = useState(false);
 
-  // Função para renderizar o conteúdo vazio baseado na aba
+  // --- ESTADO PARA DADOS REAIS DO USUÁRIO ---
+  const [userData, setUserData] = useState({ 
+    nome: 'Carregando...', 
+    email: '', 
+    iniciais: '..' 
+  });
+
+  // --- LÓGICA DE BUSCA DE DADOS ---
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      const empresasRef = ref(database, 'empresas');
+      
+      onValue(empresasRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          let nomeEncontrado = user.displayName || "Usuário";
+          
+          Object.keys(data).forEach(empresaKey => {
+            const usuarios = data[empresaKey].usuarios;
+            if (usuarios) {
+              Object.keys(usuarios).forEach(userKey => {
+                if (usuarios[userKey].uid === user.uid) {
+                  nomeEncontrado = userKey.replace(/_/g, ' ');
+                }
+              });
+            }
+          });
+
+          const iniciais = nomeEncontrado
+            .split(' ')
+            .filter(n => n.length > 0)
+            .map(n => n[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase();
+
+          setUserData({
+            nome: nomeEncontrado,
+            email: user.email || "",
+            iniciais: iniciais || "US"
+          });
+        }
+      });
+    }
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setIsProfileVisible(false);
+      router.replace('/');
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível sair.");
+    }
+  };
+
   const renderEmptyState = () => {
     switch (activeTab) {
       case 'Não Lidos':
@@ -74,20 +136,17 @@ export default function NotificacaoScreen() {
             <Bell color="#2563EB" size={24} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.avatarCircle} onPress={() => setIsProfileVisible(true)}>
-            <Text style={styles.avatarText}>US</Text>
+            <Text style={styles.avatarText}>{userData.iniciais}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        
-        {/* CABEÇALHO */}
         <View style={styles.headerSection}>
           <Text style={styles.headerTitle}>Alertas</Text>
           <Text style={styles.headerSubtitle}>Todos os alertas lidos</Text>
         </View>
 
-        {/* --- BARRA DE FILTROS (TABS) --- */}
         <View style={styles.tabBarShadow}>
             <View style={styles.tabBar}>
                 <FilterButton 
@@ -98,7 +157,7 @@ export default function NotificacaoScreen() {
                 />
                 <FilterButton 
                     label="Não Lidos" 
-                    icon={<Info style={styles.dotIcon} />} 
+                    icon={<Info style={[styles.dotIcon, {borderColor: activeTab === 'Não Lidos' ? '#1E293B' : '#64748B'}]} />} 
                     active={activeTab === 'Não Lidos'} 
                     onPress={() => setActiveTab('Não Lidos')} 
                 />
@@ -111,7 +170,6 @@ export default function NotificacaoScreen() {
             </View>
         </View>
 
-        {/* --- CONTEÚDO CENTRAL (CARD) --- */}
         <View style={styles.mainCard}>
             {renderEmptyState()}
         </View>
@@ -128,9 +186,9 @@ export default function NotificacaoScreen() {
               <TouchableOpacity onPress={() => setIsProfileVisible(false)}><X color="#94A3B8" size={30} /></TouchableOpacity>
             </View>
             <View style={styles.profileUserInfo}>
-              <View style={styles.largeAvatar}><Text style={styles.largeAvatarText}>US</Text></View>
-              <Text style={styles.userName}>Usuário</Text>
-              <Text style={styles.userEmail}>usuario@empresa.com</Text>
+              <View style={styles.largeAvatar}><Text style={styles.largeAvatarText}>{userData.iniciais}</Text></View>
+              <Text style={styles.userName}>{userData.nome}</Text>
+              <Text style={styles.userEmail}>{userData.email}</Text>
             </View>
             <View style={styles.separator} />
             <TouchableOpacity style={styles.configItem} onPress={() => { setIsProfileVisible(false); router.push('/profile'); }}>
@@ -140,7 +198,7 @@ export default function NotificacaoScreen() {
               </View>
               <ChevronRight color="#1E293B" size={20} />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnSignOut, { marginTop: 25 }]} onPress={() => { setIsProfileVisible(false); router.replace('/'); }}>
+            <TouchableOpacity style={[styles.btnSignOut, { marginTop: 25 }]} onPress={handleLogout}>
               <LogOut color="#EF4444" size={20} /><Text style={styles.btnSignOutText}>Sair da conta</Text>
             </TouchableOpacity>
           </View>
@@ -159,7 +217,6 @@ export default function NotificacaoScreen() {
   );
 }
 
-// --- COMPONENTES AUXILIARES ---
 function FilterButton({ label, icon, active, onPress }: any) {
     return (
         <TouchableOpacity 
@@ -193,74 +250,21 @@ const styles = StyleSheet.create({
   headerSection: { marginBottom: 20 },
   headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#1E293B' },
   headerSubtitle: { fontSize: 14, color: '#64748B' },
-
-  // BARRA DE FILTROS COM SOMBRA
-  tabBarShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 3,
-    marginBottom: 20,
-  },
-  tabBar: { 
-    flexDirection: 'row', 
-    backgroundColor: '#FFF', 
-    borderRadius: 14, 
-    padding: 6,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: '#F1F5F9'
-  },
-  filterBtn: { 
-    flex: 1, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    paddingVertical: 10, 
-    borderRadius: 10,
-    gap: 8
-  },
-  filterBtnActive: { 
-    backgroundColor: '#FFF',
-    // Sombra interna/destaque para o botão ativo
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#E2E8F0'
-  },
+  tabBarShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 3, marginBottom: 20 },
+  tabBar: { flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 14, padding: 6, gap: 4, borderWidth: 1, borderColor: '#F1F5F9' },
+  filterBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 10, gap: 8 },
+  filterBtnActive: { backgroundColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2, borderWidth: 1, borderColor: '#E2E8F0' },
   filterBtnText: { fontSize: 13, color: '#64748B', fontWeight: '500' },
   filterBtnTextActive: { color: '#1E293B', fontWeight: 'bold' },
-  dotIcon: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#64748B' },
-
-  // CARD PRINCIPAL
-  mainCard: { 
-    backgroundColor: '#FFF', 
-    borderRadius: 24, 
-    minHeight: 300,
-    padding: 40, 
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1, 
-    borderColor: '#F1F5F9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5, 
-  },
+  dotIcon: { width: 16, height: 16, borderRadius: 8, borderWidth: 2 },
+  mainCard: { backgroundColor: '#FFF', borderRadius: 24, minHeight: 300, padding: 40, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
   emptyContainer: { alignItems: 'center' },
   iconCircle: { width: 80, height: 80, borderRadius: 20, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#1E293B', marginBottom: 8 },
   emptySubtitle: { fontSize: 14, color: '#94A3B8', textAlign: 'center' },
-
   bottomTab: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: '#FFF', flexDirection: 'row', borderTopWidth: 1, borderColor: '#E2E8F0', paddingBottom: 20 },
   tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   activeIndicator: { position: 'absolute', bottom: 12, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#2563EB' },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', flexDirection: 'row' },
   modalBackdrop: { flex: 0.2 },
   profileSheet: { flex: 0.8, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },
