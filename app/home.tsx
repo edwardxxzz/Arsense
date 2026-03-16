@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
+  StyleSheet, 
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
@@ -10,20 +10,23 @@ import {
   Image,
   Modal,
   Pressable,
-  Alert
+  Alert,
+  TextInput,
+  ActivityIndicator,
+  FlatList
 } from 'react-native';
 import { 
   Bell, RefreshCw, Plus, Thermometer, Droplets, Wind, 
   LayoutGrid, Building2, Zap, BarChart3, ChevronRight,
-  FileText, X, User, LogOut
+  FileText, X, User, LogOut, ChevronDown, Edit2, Trash2
 } from 'lucide-react-native';
 import { LineChart } from "react-native-chart-kit";
 import Svg, { Circle } from 'react-native-svg';
 import { useRouter } from 'expo-router'; 
 
-// --- INCLUSÃO FIREBASE ---
+// --- FIREBASE ---
 import { auth, database } from '../services/firebaseConfig';
-import { ref, onValue } from "firebase/database";
+import { ref, onValue, get, set, remove, update } from "firebase/database";
 import { signOut } from "firebase/auth";
 
 const { width } = Dimensions.get('window');
@@ -35,6 +38,10 @@ interface AmbienteData {
   temperatura: number;
   umidade: number;
   co2: number;
+  tipo?: string;
+  area?: string;
+  capacidade?: string;
+  andar?: string;
 }
 
 function AqiGauge({ value }: { value: number }) {
@@ -45,7 +52,7 @@ function AqiGauge({ value }: { value: number }) {
   const circumference = radius * 2 * Math.PI;
   const totalArcLength = circumference * 0.75; 
   const gap = circumference - totalArcLength;
-  const percentage = Math.min(value / 1000, 1); // Ajustado para escala comum de CO2/AQI
+  const percentage = Math.min(value / 1000, 1); 
   const progressLength = totalArcLength * percentage;
 
   return (
@@ -67,12 +74,25 @@ export default function DashboardScreen() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [isProfileVisible, setIsProfileVisible] = useState(false);
 
-  const [userData, setUserData] = useState({ 
-    nome: 'Carregando...', 
-    email: '', 
-    iniciais: '..' 
-  });
+  // Estados de Menu e Edição
+  const [menuVisibleId, setMenuVisibleId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [selectedAmbiente, setSelectedAmbiente] = useState<AmbienteData | null>(null);
 
+  // Estados do Formulário
+  const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [ambientesDisponiveis, setAmbientesDisponiveis] = useState<string[]>([]);
+  const [showAmbienteModal, setShowAmbienteModal] = useState(false);
+  const [formNome, setFormNome] = useState('');
+  const [formAmbiente, setFormAmbiente] = useState('');
+  const [formTipo, setFormTipo] = useState('');
+  const [formMarca, setFormMarca] = useState('');
+  const [formCapacidade, setFormCapacidade] = useState('');
+  const [formArea, setFormArea] = useState(''); 
+  const [formAndar, setFormAndar] = useState(''); 
+
+  const [userData, setUserData] = useState({ nome: 'Carregando...', email: '', iniciais: '..' });
   const [ambientes, setAmbientes] = useState<AmbienteData[]>([]);
   const [medias, setMedias] = useState({ temp: 0, hum: 0, co2: 0 });
 
@@ -80,68 +100,139 @@ export default function DashboardScreen() {
     const user = auth.currentUser;
     if (user) {
       const empresasRef = ref(database, 'empresas');
-      
       onValue(empresasRef, (snapshot) => {
         const data = snapshot.val();
         if (data) {
           let nomeEncontrado = user.displayName || "Usuário";
           let listaAmbientes: AmbienteData[] = [];
+          let listaNomesAmbientes: string[] = [];
           
           Object.keys(data).forEach(empresaKey => {
             const empresaNode = data[empresaKey];
             const usuarios = empresaNode.usuarios;
-
-            if (usuarios) {
-              const usuarioPertence = Object.values(usuarios).some((u: any) => u.uid === user.uid);
-              
-              if (usuarioPertence) {
-                Object.keys(usuarios).forEach(uk => {
-                  if (usuarios[uk].uid === user.uid) nomeEncontrado = uk.replace(/_/g, ' ');
-                });
-
-                const ambientesNode = empresaNode.ambientes;
-                if (ambientesNode) {
-                  Object.keys(ambientesNode).forEach(ambKey => {
-                    const sensores = ambientesNode[ambKey].sensores;
-                    if (sensores) {
-                      listaAmbientes.push({
-                        id: ambKey,
-                        nomeExibicao: ambKey.replace(/_/g, ' '),
-                        temperatura: Number(sensores.Temperatura) || 0,
-                        umidade: Number(sensores.Umidade) || 0,
-                        co2: Number(sensores.CO2) || 0
-                      });
-                    }
+            if (usuarios && Object.values(usuarios).some((u: any) => u.uid === user.uid)) {
+              Object.keys(usuarios).forEach(uk => {
+                if (usuarios[uk].uid === user.uid) nomeEncontrado = uk.replace(/_/g, ' ');
+              });
+              const ambientesNode = empresaNode.ambientes;
+              if (ambientesNode) {
+                Object.keys(ambientesNode).forEach(ambKey => {
+                  if (ambKey !== 'Ambiente_1') listaNomesAmbientes.push(ambKey.replace(/_/g, ' '));
+                  const amb = ambientesNode[ambKey];
+                  listaAmbientes.push({
+                    id: ambKey,
+                    nomeExibicao: ambKey.replace(/_/g, ' '),
+                    temperatura: Number(amb.sensores?.Temperatura) || 0,
+                    umidade: Number(amb.sensores?.Umidade) || 0,
+                    co2: Number(amb.sensores?.CO2) || 0,
+                    tipo: amb.características?.tipo || '',
+                    area: amb.características?.area || '',
+                    capacidade: amb.características?.capacidade || '',
+                    andar: amb.características?.andar || '',
                   });
-                }
+                });
               }
             }
           });
-
-          // Cálculo das Médias
-          if (listaAmbientes.length > 0) {
-            const t = listaAmbientes.reduce((acc, curr) => acc + curr.temperatura, 0) / listaAmbientes.length;
-            const h = listaAmbientes.reduce((acc, curr) => acc + curr.umidade, 0) / listaAmbientes.length;
-            const c = listaAmbientes.reduce((acc, curr) => acc + curr.co2, 0) / listaAmbientes.length;
+          const listaFiltrada = listaAmbientes.filter(amb => amb.id !== 'Ambiente_1');
+          if (listaFiltrada.length > 0) {
+            const t = listaFiltrada.reduce((acc, curr) => acc + curr.temperatura, 0) / listaFiltrada.length;
+            const h = listaFiltrada.reduce((acc, curr) => acc + curr.umidade, 0) / listaFiltrada.length;
+            const c = listaFiltrada.reduce((acc, curr) => acc + curr.co2, 0) / listaFiltrada.length;
             setMedias({ temp: parseFloat(t.toFixed(1)), hum: Math.round(h), co2: Math.round(c) });
           }
-
           const iniciais = nomeEncontrado.split(' ').filter(n => n.length > 0).map(n => n[0]).join('').slice(0, 2).toUpperCase();
           setUserData({ nome: nomeEncontrado, email: user.email || "", iniciais });
-          setAmbientes(listaAmbientes);
+          setAmbientes(listaFiltrada);
+          setAmbientesDisponiveis(listaNomesAmbientes);
         }
       });
     }
   }, []);
 
-  const handleLogout = async () => {
+  const handleOpenEdit = (item: AmbienteData) => {
+    setSelectedAmbiente(item);
+    setFormNome(item.nomeExibicao);
+    setFormTipo(item.tipo || '');
+    setFormArea(item.area ? String(item.area) : '');
+    setFormCapacidade(item.capacidade ? String(item.capacidade) : '');
+    setFormAndar(item.andar || '');
+    setIsEditing(true);
+    setMenuVisibleId(null);
+  };
+
+  const handleUpdateAmbiente = async () => {
+    if (!selectedAmbiente) return;
+    setIsSaving(true);
     try {
-      await signOut(auth);
-      setIsProfileVisible(false);
-      router.replace('/');
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível sair.");
+      const user = auth.currentUser;
+      const snap = await get(ref(database, 'empresas'));
+      let empresaId = "";
+      Object.keys(snap.val()).forEach(key => {
+        if (Object.values(snap.val()[key].usuarios || {}).some((u: any) => u.uid === user?.uid)) empresaId = key;
+      });
+
+      const path = `empresas/${empresaId}/ambientes/${selectedAmbiente.id}/características`;
+      await update(ref(database, path), {
+        tipo: formTipo,
+        area: formArea,
+        capacidade: formCapacidade,
+        andar: formAndar
+      });
+
+      Alert.alert("Sucesso", "Ambiente atualizado!");
+      setIsEditing(false);
+    } catch (e) {
+      Alert.alert("Erro", "Falha ao atualizar.");
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const handleDeleteAmbiente = (id: string) => {
+    setMenuVisibleId(null);
+    Alert.alert("Excluir", "Deseja realmente excluir este ambiente?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Excluir", style: "destructive", onPress: async () => {
+          const user = auth.currentUser;
+          const snap = await get(ref(database, 'empresas'));
+          let empId = "";
+          Object.keys(snap.val()).forEach(k => { 
+            if (Object.values(snap.val()[k].usuarios || {}).some((u: any) => u.uid === user?.uid)) empId = k; 
+          });
+          await remove(ref(database, `empresas/${empId}/ambientes/${id}`));
+      }}
+    ]);
+  };
+
+  const handleSalvarPeriferico = async () => {
+    if (!formAmbiente || !formNome || !formTipo) {
+      Alert.alert("Atenção", "Preencha todos os campos obrigatórios (*)");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const user = auth.currentUser;
+      const ambKey = formAmbiente.replace(/ /g, '_');
+      const snap = await get(ref(database, 'empresas'));
+      let empresaEncontrada = "";
+      Object.keys(snap.val()).forEach(key => {
+        if (Object.values(snap.val()[key].usuarios || {}).some((u: any) => u.uid === user?.uid)) empresaEncontrada = key;
+      });
+      const pathTipo = `empresas/${empresaEncontrada}/ambientes/${ambKey}/perifericos/${formTipo.replace(/ /g, '_').toLowerCase()}`;
+      await set(ref(database, `${pathTipo}/${formNome.replace(/ /g, '_').toLowerCase()}`), {
+        marca: formMarca || "Genérico",
+        capacidade: formCapacidade || "",
+        status: false
+      });
+      setIsAdding(false);
+      setFormNome(''); setFormAmbiente(''); setFormTipo('');
+      Alert.alert("Sucesso", "Novo dispositivo cadastrado!");
+    } catch (error) { Alert.alert("Erro", "Falha ao salvar."); } finally { setIsSaving(false); }
+  };
+
+  const handleLogout = async () => {
+    try { await signOut(auth); setIsProfileVisible(false); router.replace('/'); } catch (e) { Alert.alert("Erro", "Não foi possível sair."); }
   };
 
   const chartData = {
@@ -158,12 +249,8 @@ export default function DashboardScreen() {
       <View style={styles.topAppBar}>
         <Image source={LogoImg} style={styles.topLogo} resizeMode="contain" />
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconBadge} onPress={() => router.push('/notificacao')}>
-            <Bell color="#000" size={24} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.avatarCircle} onPress={() => setIsProfileVisible(true)}>
-            <Text style={styles.avatarText}>{userData.iniciais}</Text>
-          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBadge} onPress={() => router.push('/notificacao')}><Bell color="#000" size={24} /></TouchableOpacity>
+          <TouchableOpacity style={styles.avatarCircle} onPress={() => setIsProfileVisible(true)}><Text style={styles.avatarText}>{userData.iniciais}</Text></TouchableOpacity>
         </View>
       </View>
 
@@ -175,12 +262,10 @@ export default function DashboardScreen() {
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.btnSecondary} onPress={() => setRefreshKey(k => k + 1)}>
-            <RefreshCw color="#000" size={18} />
-            <Text style={styles.btnSecondaryText}>Atualizar</Text>
+            <RefreshCw color="#000" size={18} /><Text style={styles.btnSecondaryText}>Atualizar</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.btnPrimary} onPress={() => router.push('/add_ambiente')}>
-            <Plus color="#FFF" size={18} />
-            <Text style={styles.btnPrimaryText}>Novo Ambiente</Text>
+          <TouchableOpacity style={styles.btnPrimary} onPress={() => setIsAdding(true)}>
+            <Plus color="#FFF" size={18} /><Text style={styles.btnPrimaryText}>Novo Periférico</Text>
           </TouchableOpacity>
         </View>
 
@@ -193,73 +278,125 @@ export default function DashboardScreen() {
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Histórico das Últimas Horas</Text>
-          <LineChart
-            data={chartData}
-            width={width - 60}
-            height={200}
-            chartConfig={{ backgroundColor: "#FFF", backgroundGradientFrom: "#FFF", backgroundGradientTo: "#FFF", decimalPlaces: 1, color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})` }}
-            bezier
-            style={{ marginVertical: 8, borderRadius: 16, marginLeft: -20 }}
-          />
+          <LineChart data={chartData} width={width - 60} height={200} chartConfig={{ backgroundColor: "#FFF", backgroundGradientFrom: "#FFF", backgroundGradientTo: "#FFF", decimalPlaces: 1, color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`, labelColor: (opacity = 1) => `rgba(100, 116, 139, ${opacity})` }} bezier style={{ marginVertical: 8, borderRadius: 16, marginLeft: -20 }} />
         </View>
 
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitleCenter}>Qualidade do Ar Geral</Text>
           <AqiGauge value={medias.co2} />
-          <Text style={[styles.statusText, { color: medias.co2 < 800 ? '#84CC16' : '#EAB308' }]}>
-            {medias.co2 < 800 ? 'Excelente' : 'Regular'}
-          </Text>
-          <Text style={styles.statusSub}>Média baseada em todos os sensores</Text>
+          <Text style={[styles.statusText, { color: medias.co2 < 800 ? '#84CC16' : '#EAB308' }]}>{medias.co2 < 800 ? 'Excelente' : 'Regular'}</Text>
         </View>
 
         <View style={styles.listHeader}>
           <Text style={styles.sectionTitle}>Seus Ambientes</Text>
-          <TouchableOpacity onPress={() => router.push('/ambientes')}>
-            <Text style={styles.viewAll}>Ver Todos →</Text>
-          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/ambientes')}><Text style={styles.viewAll}>Ver Todos →</Text></TouchableOpacity>
         </View>
 
-        {ambientes.slice(0, 2).map((item) => (
-          <RoomCard 
-            key={item.id}
-            name={item.nomeExibicao} 
-            type="Monitorado" 
-            temp={`${item.temperatura}°`} 
-            hum={`${item.umidade}%`} 
-            aqi={item.co2} 
-            icon={<LayoutGrid color="#10B981" size={24}/>} 
-            onPress={() => router.push('/ambiente')}
-          />
+        {ambientes.slice(0, 3).map((item) => (
+          <View key={item.id} style={{ zIndex: menuVisibleId === item.id ? 100 : 1 }}>
+            <RoomCard 
+              name={item.nomeExibicao} 
+              type={item.tipo || "Monitorado"} 
+              temp={`${item.temperatura}°`} 
+              hum={`${item.umidade}%`} 
+              aqi={item.co2} 
+              icon={<LayoutGrid color="#0369A1" size={24}/>} 
+              onPress={() => router.push('/ambiente')}
+              onPressArrow={() => setMenuVisibleId(menuVisibleId === item.id ? null : item.id)}
+            />
+            {menuVisibleId === item.id && (
+              <View style={styles.actionMenu}>
+                <TouchableOpacity style={styles.menuItem} onPress={() => handleOpenEdit(item)}>
+                  <Edit2 size={16} color="#475569" /><Text style={styles.menuText}>Editar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => handleDeleteAmbiente(item.id)}>
+                  <Trash2 size={16} color="#EF4444" /><Text style={[styles.menuText, {color: '#EF4444'}]}>Excluir</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         ))}
-
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* --- MODAL DE PERFIL --- */}
-      <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
+      {/* MODAL DE EDIÇÃO DE AMBIENTE */}
+      <Modal visible={isEditing} transparent animationType="fade">
+        <View style={styles.formOverlay}>
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>Editar Ambiente</Text>
+            <Text style={styles.formSubtitle}>{formNome}</Text>
+            <Text style={styles.label}>Tipo *</Text>
+            <View style={styles.inputBox}><TextInput style={styles.input} value={formTipo} onChangeText={setFormTipo} placeholder="Ex: Escritório" /></View>
+            <View style={styles.row}>
+              <View style={{flex: 1}}><Text style={styles.label}>Área (m²)</Text><View style={styles.inputBox}><TextInput style={styles.input} value={formArea} onChangeText={setFormArea} keyboardType="numeric" /></View></View>
+              <View style={{width: 15}} /><View style={{flex: 1}}><Text style={styles.label}>Capacidade</Text><View style={styles.inputBox}><TextInput style={styles.input} value={formCapacidade} onChangeText={setFormCapacidade} keyboardType="numeric" /></View></View>
+            </View>
+            <Text style={styles.label}>Andar/Localização</Text>
+            <View style={styles.inputBox}><TextInput style={styles.input} value={formAndar} onChangeText={setFormAndar} /></View>
+            <View style={styles.formButtons}>
+              <TouchableOpacity style={styles.btnCancelForm} onPress={() => setIsEditing(false)}><Text style={styles.btnCancelText}>Cancelar</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.btnCreateForm} onPress={handleUpdateAmbiente}>
+                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnCreateText}>Salvar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* MODAL NOVO PERIFÉRICO */}
+      <Modal visible={isAdding} transparent animationType="fade">
+        <View style={styles.formOverlay}>
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>Novo Periférico</Text>
+            <Text style={styles.formSubtitle}>Adicione o dispositivo para o controle remoto</Text>
+            <Text style={styles.label}>Nome *</Text>
+            <View style={styles.inputBox}><TextInput style={styles.input} placeholder="Ex: Ar" value={formNome} onChangeText={setFormNome} /></View>
+            <Text style={styles.label}>Ambiente *</Text>
+            <TouchableOpacity style={styles.inputBox} onPress={() => setShowAmbienteModal(true)}>
+              <Text style={formAmbiente ? styles.inputText : styles.inputPlaceholder}>{formAmbiente || "Selecione"}</Text>
+              <ChevronDown color="#64748B" size={20} />
+            </TouchableOpacity>
+            <Text style={styles.label}>Tipo *</Text>
+            <View style={styles.inputBox}><TextInput style={styles.input} placeholder="Tipo" value={formTipo} onChangeText={setFormTipo} /></View>
+            <View style={styles.formButtons}>
+              <TouchableOpacity style={styles.btnCancelForm} onPress={() => setIsAdding(false)}><Text style={styles.btnCancelText}>Cancelar</Text></TouchableOpacity>
+              <TouchableOpacity style={styles.btnCreateForm} onPress={handleSalvarPeriferico}>
+                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnCreateText}>Criar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* SELETOR DE AMBIENTE */}
+      <Modal visible={showAmbienteModal} transparent animationType="slide">
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Selecionar Ambiente</Text>
+              <TouchableOpacity onPress={() => setShowAmbienteModal(false)}><X color="#000" size={24}/></TouchableOpacity>
+            </View>
+            <FlatList
+              data={ambientesDisponiveis}
+              keyExtractor={(item) => item}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.pickerItem} onPress={() => { setFormAmbiente(item); setShowAmbienteModal(false); }}>
+                  <Text style={[styles.pickerText, formAmbiente === item && {color: '#2563EB', fontWeight: 'bold'}]}>{item}</Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* PERFIL */}
+      <Modal animationType="fade" transparent={true} visible={isProfileVisible}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
           <View style={styles.profileSheet}>
-            <View style={styles.profileHeader}>
-              <Text style={styles.profileTitle}>Perfil</Text>
-              <TouchableOpacity onPress={() => setIsProfileVisible(false)}><X color="#94A3B8" size={30} /></TouchableOpacity>
-            </View>
-            <View style={styles.profileUserInfo}>
-              <View style={styles.largeAvatar}><Text style={styles.largeAvatarText}>{userData.iniciais}</Text></View>
-              <Text style={styles.userName}>{userData.nome}</Text>
-              <Text style={styles.userEmail}>{userData.email}</Text>
-            </View>
-            <View style={styles.separator} />
-            <TouchableOpacity style={styles.configItem} onPress={() => { setIsProfileVisible(false); router.push('/profile'); }}>
-              <View style={styles.configItemLeft}>
-                <View style={styles.configIconBox}><User color="#1E293B" size={22} /></View>
-                <View><Text style={styles.configItemTitle}>Minha Conta</Text><Text style={styles.configItemSub}>Dados Pessoais</Text></View>
-              </View>
-              <ChevronRight color="#1E293B" size={20} />
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.btnSignOut, { marginTop: 25 }]} onPress={handleLogout}>
-              <LogOut color="#EF4444" size={20} /><Text style={styles.btnSignOutText}>Sair da conta</Text>
-            </TouchableOpacity>
+            <View style={styles.profileHeader}><Text style={styles.profileTitle}>Perfil</Text><TouchableOpacity onPress={() => setIsProfileVisible(false)}><X color="#94A3B8" size={30} /></TouchableOpacity></View>
+            <View style={styles.profileUserInfo}><View style={styles.largeAvatar}><Text style={styles.largeAvatarText}>{userData.iniciais}</Text></View><Text style={styles.userName}>{userData.nome}</Text><Text style={styles.userEmail}>{userData.email}</Text></View>
+            <TouchableOpacity style={[styles.btnSignOut, { marginTop: 25 }]} onPress={handleLogout}><LogOut color="#EF4444" size={20} /><Text style={styles.btnSignOutText}>Sair da conta</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -275,7 +412,48 @@ export default function DashboardScreen() {
   );
 }
 
-// --- ESTILOS E COMPONENTES AUXILIARES ---
+// COMPONENTES AUXILIARES COM O DESIGN AZUL ATUALIZADO
+function MetricCard({ label, value, unit, icon, iconBg }: any) {
+  return (
+    <View style={styles.metricCard}>
+      <View style={styles.metricHeader}><View style={[styles.metricIcon, {backgroundColor: iconBg}]}>{icon}</View></View>
+      <View><Text style={styles.metricLabel}>{label}</Text><View style={styles.metricValueRow}><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricUnit}>{unit}</Text></View></View>
+    </View>
+  );
+}
+
+function RoomCard({ name, type, temp, hum, aqi, icon, onPress, onPressArrow }: any) {
+  return (
+    <TouchableOpacity style={styles.roomCard} activeOpacity={0.7} onPress={onPress}>
+      <View style={styles.roomHeader}>
+        <View style={styles.roomInfoMain}>
+          <View style={styles.roomIconBox}>{icon}</View>
+          <View><Text style={styles.roomName}>{name}</Text><Text style={styles.roomType}>{type}</Text></View>
+        </View>
+        <TouchableOpacity 
+          onPress={onPressArrow} 
+          hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}
+          style={{padding: 5}}
+        >
+          <ChevronDown color="#64748B" size={22} />
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.metricsRow}>
+        <View style={styles.metricBox}><Thermometer size={16} color="#EF4444" /><Text style={styles.metricValueCard}>{temp}</Text><Text style={styles.metricLabelCard}>Temp</Text></View>
+        <View style={styles.metricBox}><Droplets size={16} color="#3B82F6" /><Text style={styles.metricValueCard}>{hum}</Text><Text style={styles.metricLabelCard}>Umidade</Text></View>
+        <View style={styles.metricBox}><Wind size={16} color="#0D9488" /><Text style={styles.metricValueCard}>{aqi}</Text><Text style={styles.metricLabelCard}>AQI</Text></View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function TabItem({ icon, active, onPress }: any) {
+  return (
+    <TouchableOpacity style={styles.tabItem} onPress={onPress}>{icon}{active && <View style={styles.activeIndicator} />}</TouchableOpacity>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   topAppBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 5, backgroundColor: '#FFF' },
@@ -294,14 +472,14 @@ const styles = StyleSheet.create({
   btnSecondaryText: { fontWeight: '600', color: '#000' },
   btnPrimaryText: { fontWeight: '600', color: '#FFF' },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 20, gap: 12 },
-  metricCard: { width: (width / 2) - 26, height: 140, backgroundColor: '#FFF', borderRadius: 22, padding: 15, elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
+  metricCard: { width: (width / 2) - 26, height: 140, backgroundColor: '#FFF', borderRadius: 22, padding: 15, elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
   metricHeader: { marginBottom: 10 },
   metricIcon: { width: 50, height: 50, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   metricLabel: { fontSize: 12, color: '#64748B', fontWeight: '600' },
   metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
   metricValue: { fontSize: 22, fontWeight: 'bold', color: '#1E293B' },
   metricUnit: { fontSize: 12, color: '#94A3B8' },
-  sectionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginTop: 20, marginHorizontal: 20, elevation: 4, shadowColor: '#000', shadowOpacity: 0.08 },
+  sectionCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 20, marginTop: 20, marginHorizontal: 20, elevation: 4 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 15 },
   sectionTitleCenter: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', textAlign: 'center', marginBottom: 10 },
   gaugeContainer: { alignItems: 'center', justifyContent: 'center', height: 180 },
@@ -309,19 +487,21 @@ const styles = StyleSheet.create({
   gaugeValue: { fontSize: 38, fontWeight: 'bold', color: '#1E293B' },
   gaugeLabel: { fontSize: 12, color: '#94A3B8' },
   statusText: { fontSize: 20, fontWeight: 'bold', textAlign: 'center', marginTop: 10 },
-  statusSub: { fontSize: 11, color: '#94A3B8', textAlign: 'center' },
   listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 25, marginBottom: 15, paddingHorizontal: 20 },
   viewAll: { color: '#2563EB', fontWeight: '600' },
-  roomCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 15, marginBottom: 12, borderWidth: 1, borderColor: '#F1F5F9', marginHorizontal: 20 },
-  roomHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  roomInfoMain: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  roomIconBox: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#D1FAE5', justifyContent: 'center', alignItems: 'center' },
-  roomName: { fontSize: 15, fontWeight: 'bold', color: '#1E293B' },
-  roomType: { fontSize: 11, color: '#64748B' },
-  roomMetrics: { flexDirection: 'row', justifyContent: 'space-between' },
-  roomMetricItem: { alignItems: 'center', gap: 2 },
-  roomMetricValue: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
-  roomMetricLabel: { fontSize: 10, color: '#94A3B8' },
+  
+  // DESIGN DOS CARDS (TELA AMBIENTES)
+  roomCard: { backgroundColor: '#F0F9FF', borderRadius: 24, padding: 20, marginBottom: 15, borderWidth: 1, borderColor: '#BAE6FD', marginHorizontal: 20 },
+  roomHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  roomInfoMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  roomIconBox: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
+  roomName: { fontSize: 17, fontWeight: 'bold', color: '#1E293B' },
+  roomType: { fontSize: 12, color: '#64748B' },
+  metricsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+  metricBox: { flex: 1, backgroundColor: '#FFF', borderRadius: 16, paddingVertical: 10, alignItems: 'center', gap: 2, elevation: 1 },
+  metricValueCard: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
+  metricLabelCard: { fontSize: 10, color: '#94A3B8', fontWeight: '600' },
+
   bottomTab: { position: 'absolute', bottom: 0, width: '100%', height: 75, backgroundColor: '#FFF', flexDirection: 'row', borderTopWidth: 1, borderColor: '#E2E8F0', paddingBottom: 15 },
   tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   activeIndicator: { position: 'absolute', bottom: 10, width: 4, height: 4, borderRadius: 2, backgroundColor: '#2563EB' },
@@ -335,57 +515,30 @@ const styles = StyleSheet.create({
   largeAvatarText: { color: '#FFF', fontSize: 28, fontWeight: 'bold' },
   userName: { fontSize: 18, fontWeight: 'bold' },
   userEmail: { fontSize: 13, color: '#64748B' },
-  separator: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 20 },
-  configItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  configItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  configIconBox: { width: 40, height: 40, backgroundColor: '#F8FAFC', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  configItemTitle: { fontSize: 15, fontWeight: '600' },
-  configItemSub: { fontSize: 11, color: '#94A3B8' },
   btnSignOut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: '#EF4444', borderRadius: 12, height: 50 },
-  btnSignOutText: { color: '#EF4444', fontWeight: 'bold' }
+  btnSignOutText: { color: '#EF4444', fontWeight: 'bold' },
+  actionMenu: { position: 'absolute', right: 40, top: 60, backgroundColor: '#FFF', borderRadius: 12, width: 130, elevation: 15, borderWidth: 1, borderColor: '#F1F5F9', padding: 5, zIndex: 999 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
+  menuText: { fontSize: 14, fontWeight: '500', color: '#475569' },
+  formOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', padding: 20 },
+  formCard: { backgroundColor: '#FFF', borderRadius: 25, padding: 25 },
+  formTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center' },
+  formSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 20 },
+  label: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
+  inputBox: { height: 50, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
+  input: { flex: 1, fontSize: 15, color: '#000' },
+  inputText: { fontSize: 15, color: '#1E293B' },
+  inputPlaceholder: { fontSize: 15, color: '#94A3B8' },
+  row: { flexDirection: 'row' },
+  formButtons: { flexDirection: 'row', gap: 15, marginTop: 10 },
+  btnCancelForm: { flex: 1, height: 50, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
+  btnCreateForm: { flex: 1, height: 50, borderRadius: 10, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
+  btnCancelText: { fontWeight: 'bold', color: '#64748B' },
+  btnCreateText: { fontWeight: 'bold', color: '#FFF' },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  pickerCard: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, maxHeight: '60%' },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  pickerTitle: { fontSize: 18, fontWeight: 'bold' },
+  pickerItem: { paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  pickerText: { fontSize: 16, color: '#334155' },
 });
-
-function MetricCard({ label, value, unit, icon, iconBg }: any) {
-  return (
-    <View style={styles.metricCard}>
-      <View style={styles.metricHeader}>
-        <View style={[styles.metricIcon, {backgroundColor: iconBg}]}>{icon}</View>
-      </View>
-      <View>
-        <Text style={styles.metricLabel}>{label}</Text>
-        <View style={styles.metricValueRow}>
-          <Text style={styles.metricValue}>{value}</Text>
-          <Text style={styles.metricUnit}>{unit}</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function RoomCard({ name, type, temp, hum, aqi, icon, onPress }: any) {
-  return (
-    <TouchableOpacity style={styles.roomCard} onPress={onPress}>
-      <View style={styles.roomHeader}>
-        <View style={styles.roomInfoMain}>
-          <View style={styles.roomIconBox}>{icon}</View>
-          <View><Text style={styles.roomName}>{name}</Text><Text style={styles.roomType}>{type}</Text></View>
-        </View>
-        <ChevronRight color="#64748B" size={18} />
-      </View>
-      <View style={styles.roomMetrics}>
-        <View style={styles.roomMetricItem}><Thermometer size={14} color="#EF4444" /><Text style={styles.roomMetricValue}>{temp}</Text><Text style={styles.roomMetricLabel}>Temp</Text></View>
-        <View style={styles.roomMetricItem}><Droplets size={14} color="#3B82F6" /><Text style={styles.roomMetricValue}>{hum}</Text><Text style={styles.roomMetricLabel}>Umidade</Text></View>
-        <View style={styles.roomMetricItem}><Wind size={14} color="#10B981" /><Text style={styles.roomMetricValue}>{aqi}</Text><Text style={styles.roomMetricLabel}>CO₂</Text></View>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function TabItem({ icon, active, onPress }: any) {
-  return (
-    <TouchableOpacity style={styles.tabItem} onPress={onPress}>
-      {icon}
-      {active && <View style={styles.activeIndicator} />}
-    </TouchableOpacity>
-  );
-}
