@@ -56,6 +56,7 @@ export default function AmbientesScreen() {
   
   // Estados de Dados
   const [ambientes, setAmbientes] = useState<AmbienteData[]>([]);
+  const [empresaId, setEmpresaId] = useState(''); // <--- ADICIONADO PARA NAVEGAÇÃO
   const [selectedAmbiente, setSelectedAmbiente] = useState<AmbienteData | null>(null);
   const [userData, setUserData] = useState({ 
     nome: 'Carregando...', 
@@ -85,6 +86,7 @@ export default function AmbientesScreen() {
             const usuarios = empresaNode.usuarios;
 
             if (usuarios && Object.values(usuarios).some((u: any) => u.uid === user.uid)) {
+              setEmpresaId(empresaKey); // <--- SALVA A KEY DA EMPRESA ATUAL
               Object.keys(usuarios).forEach(uk => {
                 if (usuarios[uk].uid === user.uid) {
                   nomeEncontrado = uk.replace(/_/g, ' ');
@@ -122,8 +124,6 @@ export default function AmbientesScreen() {
     }
   }, []);
 
-  // --- LÓGICA DE SALVAR/EDITAR/EXCLUIR ---
-
   const handleSalvarAmbiente = async () => {
     if (!formNome.trim() || !formTipo.trim() || !formAndar.trim()) {
       Alert.alert("Campos Obrigatórios", "Por favor, preencha o Nome, Tipo e Andar.");
@@ -143,7 +143,6 @@ export default function AmbientesScreen() {
         const pathAmbientes = `empresas/${empresaKeyFound}/ambientes`;
         
         if (isEditing && selectedAmbiente) {
-          // Lógica de Edição (Update)
           const pathCarac = `${pathAmbientes}/${selectedAmbiente.id}/características`;
           await update(ref(database, pathCarac), {
             tipo: formTipo,
@@ -153,7 +152,6 @@ export default function AmbientesScreen() {
           });
           Alert.alert("Sucesso", "Ambiente atualizado!");
         } else {
-          // Lógica de Criação (Set)
           const novoId = formNome.trim().replace(/ /g, '_');
           const payload = {
             características: { tipo: formTipo, area: formArea || "0", capacidade: formCapacidade || "0", andar: formAndar },
@@ -191,7 +189,7 @@ export default function AmbientesScreen() {
     setFormCapacidade(item.capacidade ? String(item.capacidade) : '');
     setFormAndar(item.andar || '');
     setIsEditing(true);
-    setIsAdding(true); // Reutiliza o modal de criação para edição
+    setIsAdding(true);
     setMenuVisibleId(null);
   };
 
@@ -268,7 +266,11 @@ export default function AmbientesScreen() {
                 type={item.tipo || "Monitorado"} 
                 temp={item.temperatura} hum={item.umidade} aqi={item.co2} 
                 icon={item.tipo?.includes('Escritório') ? <Building2 color="#0369A1" size={22}/> : <LayoutGrid color="#0369A1" size={22}/>} 
-                onPress={() => router.push('/ambiente')}
+                // LÓGICA DE NAVEGAÇÃO APLICADA AQUI:
+                onPress={() => router.push({
+                  pathname: '/ambiente',
+                  params: { id: item.id, nome: item.nomeExibicao, empresa: empresaId }
+                })}
                 onPressArrow={() => setMenuVisibleId(menuVisibleId === item.id ? null : item.id)}
               />
               
@@ -293,100 +295,60 @@ export default function AmbientesScreen() {
       </ScrollView>
 
       {/* MODAL NOVO/EDITAR AMBIENTE */}
-<Modal visible={isAdding} transparent animationType="fade" onRequestClose={() => setIsAdding(false)}>
-  <View style={styles.modalOverlayBlack}>
-    <View style={styles.formCard}>
-      <Text style={styles.formTitle}>{isEditing ? "Editar Ambiente" : "Novo Ambiente"}</Text>
-      
-      {/* CORREÇÃO AQUI: Usando selectedAmbiente em vez de item */}
-      <Text style={styles.formSubtitle}>
-        {isEditing ? selectedAmbiente?.nomeExibicao : "Configure os dados do local"}
-      </Text>
+      <Modal visible={isAdding} transparent animationType="fade" onRequestClose={() => setIsAdding(false)}>
+        <View style={styles.modalOverlayBlack}>
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>{isEditing ? "Editar Ambiente" : "Novo Ambiente"}</Text>
+            <Text style={styles.formSubtitle}>
+              {isEditing ? selectedAmbiente?.nomeExibicao : "Configure os dados do local"}
+            </Text>
 
-      {!isEditing && (
-        <>
-          <Text style={styles.label}>Nome do Ambiente *</Text>
-          <View style={styles.inputBox}>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Ex: Sala de Reunião" 
-              value={formNome} 
-              onChangeText={setFormNome} 
-            />
-          </View>
-        </>
-      )}
+            {!isEditing && (
+              <>
+                <Text style={styles.label}>Nome do Ambiente *</Text>
+                <View style={styles.inputBox}>
+                  <TextInput style={styles.input} placeholder="Ex: Sala de Reunião" value={formNome} onChangeText={setFormNome} />
+                </View>
+              </>
+            )}
 
-      <Text style={styles.label}>Tipo *</Text>
-      <View style={styles.inputBox}>
-        <TextInput 
-          style={styles.input} 
-          placeholder="Ex: Escritório" 
-          value={formTipo} 
-          onChangeText={setFormTipo} 
-        />
-      </View>
+            <Text style={styles.label}>Tipo *</Text>
+            <View style={styles.inputBox}>
+              <TextInput style={styles.input} placeholder="Ex: Escritório" value={formTipo} onChangeText={setFormTipo} />
+            </View>
 
-      <View style={styles.row}>
-        <View style={{flex: 1}}>
-          <Text style={styles.label}>Área(m²)</Text>
-          <View style={styles.inputBox}>
-            <TextInput 
-              style={styles.input} 
-              placeholder="0" 
-              keyboardType="numeric" 
-              value={formArea} 
-              onChangeText={setFormArea} 
-            />
-          </View>
-        </View>
-        <View style={{width: 15}} />
-        <View style={{flex: 1}}>
-          <Text style={styles.label}>Capacidade</Text>
-          <View style={styles.inputBox}>
-            <TextInput 
-              style={styles.input} 
-              placeholder="0" 
-              keyboardType="numeric" 
-              value={formCapacidade} 
-              onChangeText={setFormCapacidade} 
-            />
+            <View style={styles.row}>
+              <View style={{flex: 1}}>
+                <Text style={styles.label}>Área(m²)</Text>
+                <View style={styles.inputBox}>
+                  <TextInput style={styles.input} placeholder="0" keyboardType="numeric" value={formArea} onChangeText={setFormArea} />
+                </View>
+              </View>
+              <View style={{width: 15}} />
+              <View style={{flex: 1}}>
+                <Text style={styles.label}>Capacidade</Text>
+                <View style={styles.inputBox}>
+                  <TextInput style={styles.input} placeholder="0" keyboardType="numeric" value={formCapacidade} onChangeText={setFormCapacidade} />
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.label}>Andar/Localização *</Text>
+            <View style={styles.inputBox}>
+              <TextInput style={styles.input} placeholder="Ex: 3º Andar" value={formAndar} onChangeText={setFormAndar} />
+            </View>
+
+            <View style={styles.formButtons}>
+              <TouchableOpacity style={styles.btnCancelForm} onPress={() => { setIsAdding(false); resetForm(); }}>
+                <Text style={styles.btnCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnCreateForm} onPress={handleSalvarAmbiente} disabled={isSaving}>
+                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnCreateText}>{isEditing ? "Salvar" : "Criar"}</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </View>
-
-      <Text style={styles.label}>Andar/Localização *</Text>
-      <View style={styles.inputBox}>
-        <TextInput 
-          style={styles.input} 
-          placeholder="Ex: 3º Andar" 
-          value={formAndar} 
-          onChangeText={setFormAndar} 
-        />
-      </View>
-
-      <View style={styles.formButtons}>
-        <TouchableOpacity 
-          style={styles.btnCancelForm} 
-          onPress={() => { setIsAdding(false); resetForm(); }}
-        >
-          <Text style={styles.btnCancelText}>Cancelar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.btnCreateForm} 
-          onPress={handleSalvarAmbiente} 
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <Text style={styles.btnCreateText}>{isEditing ? "Salvar" : "Criar"}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  </View>
-</Modal>
+      </Modal>
 
       {/* MODAL PERFIL */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
@@ -476,7 +438,6 @@ const styles = StyleSheet.create({
   searchContainerFocused: { borderColor: '#000', backgroundColor: '#FFF' },
   searchInput: { flex: 1, height: '90%', fontSize: 15, color: '#1E293B' },
   
-  // Estilo Card Azulado solicitado
   roomCard: { backgroundColor: '#F0F9FF', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#BAE6FD' },
   roomHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   roomInfoMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -488,7 +449,6 @@ const styles = StyleSheet.create({
   metricValue: { fontSize: 16, fontWeight: 'bold', color: '#1E293B' },
   metricLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
   
-  // Menu de Ações (Igual Dashboard)
   actionMenu: { position: 'absolute', right: 30, top: 60, backgroundColor: '#FFF', borderRadius: 12, width: 130, elevation: 15, borderWidth: 1, borderColor: '#F1F5F9', padding: 5, zIndex: 999 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
   menuText: { fontSize: 14, fontWeight: '500', color: '#475569' },
@@ -503,7 +463,7 @@ const styles = StyleSheet.create({
   formSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 25 },
   label: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 8 },
   inputBox: { height: 55, borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  input: { flex: 1, height: '90%', fontSize: 15, color: '#000' },
+  input: { flex: 1, height: '90%', fontSize: 15, color: '#000', outlineWidth:0, outlineColor:"transparent"},
   row: { flexDirection: 'row' },
   formButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
   btnCancelForm: { flex: 1, height: 50, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },

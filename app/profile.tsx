@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
   inputWrapper: { marginBottom: 16 },
   labelStyle: { fontSize: 14, fontWeight: '600', color: '#1E293B', marginBottom: 8 },
   inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 15, height: 48, gap: 10 },
-  textInput: { flex: 1, fontSize: 15, color: '#1E293B' },
+  textInput: { flex: 1, fontSize: 15, color: '#1E293B',height:"90%", outlineWidth:0 , outlineColor:"transparent"},
   
   btnSave: { backgroundColor: '#2563EB', height: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 10 },
   btnSaveText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },

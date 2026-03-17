@@ -238,7 +238,7 @@ export default function PerifericosScreen() {
                     status={p.status}
                     dbPath={p.dbPath}
                     icon={p.tipo.toLowerCase().includes('ar') ? <Snowflake color="#06B6D4" size={24}/> : <Sun color="#06B6D4" size={24}/>}
-                    onPress={() => router.push('/periferico')}
+                    onPress={() => router.push('/ambiente')}
                     onMore={() => setMenuVisibleId(menuVisibleId === p.id ? null : p.id)}
                 />
                 {menuVisibleId === p.id && (
@@ -466,7 +466,7 @@ const styles = StyleSheet.create({
   formSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 25 },
   label: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 8 },
   inputBox: { height: 55, borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  input: { flex: 1, height: '90%', fontSize: 15, color: '#000' },
+  input: { flex: 1, height: '90%', fontSize: 15, color: '#000', outlineWidth:0, outlineColor:"transparent" },
   inputText: { fontSize: 15 },
   row: { flexDirection: 'row' },
   formButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },

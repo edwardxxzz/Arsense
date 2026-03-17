@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
   formSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
   inputBox: { height: 50, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 15 },
-  input: { flex: 1, fontSize: 15, color: '#000' },
+  input: { flex: 1, fontSize: 15, color: '#000', height:"90%",outlineWidth:0,outlineColor:"transparent" },
   inputText: { fontSize: 15, color: '#1E293B' },
   inputPlaceholder: { fontSize: 15, color: '#94A3B8' },
   row: { flexDirection: 'row' },
