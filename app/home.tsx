@@ -38,8 +38,8 @@ import {
   where,
   collectionGroup,
   getDocs,
-  orderBy, // ADICIONADO PARA O GRÁFICO
-  limit    // ADICIONADO PARA O GRÁFICO
+  orderBy,
+  limit
 } from "firebase/firestore";
 
 const { width } = Dimensions.get('window');
@@ -127,7 +127,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     let unsubConfig: (() => void) | undefined;
     let unsubAmbientes: (() => void) | undefined;
-    let unsubHistorico: (() => void) | undefined; // Listener do gráfico
+    let unsubHistorico: (() => void) | undefined;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) return;
@@ -159,7 +159,8 @@ export default function DashboardScreen() {
             unsubAmbientes = onSnapshot(collection(db, "empresas", empresaId, "ambientes"), (snap) => {
               const lista: AmbienteData[] = [];
               snap.forEach((docAmb) => {
-                if (docAmb.id !== 'Ambiente_1') {
+                // IGNORANDO O AMBIENTE 1 (SOMENTE ELE)
+                if (docAmb.id.toLowerCase() !== 'ambiente_1') {
                   const amb = docAmb.data();
                   lista.push({
                     id: docAmb.id,
@@ -179,16 +180,15 @@ export default function DashboardScreen() {
               setMedias(prev => ({ ...prev, hum: hMedia }));
             });
 
-            // --- NOVO: Listener Histórico (Gráfico) ---
+            // Listener Histórico (Gráfico)
             const historicoQuery = query(
               collection(db, "empresas", empresaId, "historico_geral"),
-              orderBy("timestamp", "desc"), // Pega do mais recente pro mais antigo
-              limit(6) // Mostra só as últimas 6 horas
+              orderBy("timestamp", "desc"),
+              limit(6)
             );
 
             unsubHistorico = onSnapshot(historicoQuery, (snap) => {
               if (!snap.empty) {
-                // Como pegamos descending, precisamos reverter o array para o tempo ir da esquerda pra direita
                 const docsData = snap.docs.map(d => d.data()).reverse();
 
                 const labels = docsData.map(d => d.hora || "--");
@@ -208,7 +208,7 @@ export default function DashboardScreen() {
       unsubscribeAuth(); 
       if (unsubConfig) unsubConfig(); 
       if (unsubAmbientes) unsubAmbientes(); 
-      if (unsubHistorico) unsubHistorico(); // Limpa o listener
+      if (unsubHistorico) unsubHistorico(); 
     };
   }, [refreshKey]);
 
@@ -351,7 +351,8 @@ export default function DashboardScreen() {
               hum={`${item.umidade}%`}
               aqi={item.co2}
               icon={<LayoutGrid color="#0369A1" size={24}/>}
-              onPress={() => router.push({ pathname: '/ambiente', params: { id: item.id, nome: item.nomeExibicao, empresa: userEmpresaId } })}
+              /* ATUALIZADO AQUI COM AS VARIÁVEIS DE ROTA CORRETAS */
+              onPress={() => router.push({ pathname: '/ambiente', params: { id: item.id, nomeExibicao: item.nomeExibicao, empresaId: userEmpresaId } })}
               onPressArrow={() => setMenuVisibleId(menuVisibleId === item.id ? null : item.id)}
             />
             {menuVisibleId === item.id && (

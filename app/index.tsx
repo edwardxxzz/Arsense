@@ -73,14 +73,30 @@ export default function LoginScreen() {
       const empresaRef = doc(db, "empresas", safeCompany);
       const empresaSnap = await getDoc(empresaRef);
 
-      // 4. Se a empresa NÃO existe, criar a estrutura inicial
+      // 4. Se a empresa NÃO existe, criar a estrutura inicial baseada na nova modelagem
       if (!empresaSnap.exists()) {
-        console.log("Criando estrutura da empresa...");
+        console.log("Criando nova estrutura da empresa (Integração Hardware)...");
+        const dataAtualIso = new Date().toISOString();
         
         // Cria doc da empresa
         await setDoc(empresaRef, {
           nome: safeCompany,
-          criadoEm: new Date().toISOString()
+          criadoEm: dataAtualIso
+        });
+
+        // NOVA ESTRUTURA: Cria coleção 'config' > 'geral'
+        await setDoc(doc(db, "empresas", safeCompany, "config", "geral"), {
+          co2_medio: 30,
+          indice_conforto: 0,
+          qual_do_ar: 70,
+          temperatura_media: 0
+        });
+
+        // NOVA ESTRUTURA: Cria coleção 'centrais' > 'macRPI'
+        await setDoc(doc(db, "empresas", safeCompany, "centrais", "macRPI"), {
+          ip_local: "",
+          nome: "",
+          online: false
         });
 
         // NOVA ESTRUTURA: Cria subcoleção 'historico_geral' com o primeiro registro temporal
@@ -90,21 +106,52 @@ export default function LoginScreen() {
           hora: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           co2_medio: 0,
           indice_conforto: 0,
+          luminosidade: 0,
+          presenca: 0,
           qual_do_ar: 0,
           temperatura_media: 0
         });
 
-        // Cria subcoleção 'ambientes'
-        await setDoc(doc(db, "empresas", safeCompany, "ambientes", "Ambiente_1"), {
-          nome: "Ambiente 1",
-          tipo: "Geral",
-          localizacao: "Principal",
-          sensores: { co2: 764, temperatura: 24.5, umidade: 43, particulas: 10.2 },
-          perifericos: { ar_condicionado: { geral: { status: false, marca: "Genérico", capacidade: "" } } }
+        // NOVA ESTRUTURA: Cria coleção 'ambientes' > 'ambiente_1'
+        const ambiente1Ref = doc(db, "empresas", safeCompany, "ambientes", "ambiente_1");
+        await setDoc(ambiente1Ref, {
+          dados: {
+            central_id: "central 1",
+            criadoEM: dataAtualIso,
+            nome: "ambiente 1",
+            receptor_id: "receptor1"
+          },
+          sensores: {
+            iluminação: 0,
+            presenca: false,
+            temperatura: 0,
+            umidade: 0
+          }
+        });
+
+        // NOVA ESTRUTURA: Subcoleção 'historico' do ambiente_1
+        await setDoc(doc(ambiente1Ref, "historico", "registro_inicial"), {
+          co2: 0,
+          luminosidade: 0,
+          presenca: 0,
+          qualidade_ar: 100,
+          temperatura: 0,
+          timestamp: dataAtualIso,
+          umidade: 0
+        });
+
+        // NOVA ESTRUTURA: Subcoleção 'perifericos' do ambiente_1
+        await setDoc(doc(ambiente1Ref, "perifericos", "ar_condicionado"), {
+          geral: {
+            ligado: false,
+            marca: "",
+            modelo: "",
+            temperatura: 24
+          }
         });
       }
 
-      // 5. Criar o documento do Usuário
+      // 5. Criar o documento do Usuário (na subcoleção usuarios da empresa)
       console.log("Salvando dados do usuário no Firestore...");
       
       await setDoc(doc(db, "empresas", safeCompany, "usuarios", uid), {

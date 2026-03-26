@@ -12,7 +12,8 @@ import {
   Modal,
   Pressable,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Animated // <-- Adicionado para a animação do Skeleton
 } from 'react-native';
 import { 
   Bell, Plus, Search, Thermometer, Droplets, Wind, LayoutGrid, 
@@ -56,6 +57,7 @@ export default function AmbientesScreen() {
   const [searchText, setSearchText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [menuVisibleId, setMenuVisibleId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true); // <-- Estado de Loading adicionado
   
   // Estados de Dados
   const [ambientes, setAmbientes] = useState<AmbienteData[]>([]);
@@ -78,6 +80,7 @@ export default function AmbientesScreen() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setUserData({ nome: 'Desconhecido', email: '', iniciais: '..' });
+        setIsLoading(false); // Desliga loading se não tiver usuário
         return;
       }
 
@@ -87,6 +90,7 @@ export default function AmbientesScreen() {
 
         if (userSnapshot.empty) {
           console.log("Usuário não encontrado em nenhuma empresa.");
+          setIsLoading(false); // Desliga loading se der erro
           return;
         }
 
@@ -126,12 +130,14 @@ export default function AmbientesScreen() {
             });
 
             setAmbientes(lista);
+            setIsLoading(false); // <-- Desliga o Loading quando carrega a lista do Firebase
           });
 
           return () => unsubAmbientes();
         }
       } catch (error) {
         console.error("Erro ao buscar dados:", error);
+        setIsLoading(false);
       }
     });
 
@@ -188,14 +194,13 @@ export default function AmbientesScreen() {
 
         await setDoc(novoAmbRef, payload);
 
-        // --- NOVA LÓGICA: Criar a coleção 'historico' com os dados para o gráfico ---
         const historicoRef = collection(novoAmbRef, "historico");
         await setDoc(doc(historicoRef, "registro_inicial"), {
           timestamp: new Date().toISOString(),
           temperatura: 0,
           umidade: 0,
           co2: 0,
-          qualidade_ar: 100 // Valor inicial para qualidade do ar
+          qualidade_ar: 100 
         });
 
         Alert.alert("Sucesso", "Ambiente criado com sucesso!");
@@ -288,7 +293,11 @@ export default function AmbientesScreen() {
           />
         </Pressable>
 
-        {ambientesFiltrados.length > 0 ? (
+        {/* LÓGICA DO SKELETON E LISTAGEM DOS AMBIENTES */}
+        {isLoading ? (
+          // Mostra 4 Skeleton Cards enquanto carrega
+          [1, 2, 3, 4].map((item) => <SkeletonCard key={item} />)
+        ) : ambientesFiltrados.length > 0 ? (
           ambientesFiltrados.map((item) => (
             <View key={item.id} style={{ zIndex: menuVisibleId === item.id ? 100 : 1 }}>
               <RoomDetailCard 
@@ -320,10 +329,11 @@ export default function AmbientesScreen() {
             <Text style={{ color: '#94A3B8' }}>Nenhum ambiente encontrado.</Text>
           </View>
         )}
+        
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* MODAIS MANTIDOS INTACTOS AQUI */}
+      {/* MODAL DE ADIÇÃO/EDIÇÃO */}
       <Modal visible={isAdding} transparent animationType="fade" onRequestClose={() => setIsAdding(false)}>
         <View style={styles.modalOverlayBlack}>
           <View style={styles.formCard}>
@@ -379,6 +389,7 @@ export default function AmbientesScreen() {
         </View>
       </Modal>
 
+      {/* MODAL DE PERFIL */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -418,6 +429,7 @@ export default function AmbientesScreen() {
   );
 }
 
+// COMPONENTE DO CARD REAL
 function RoomDetailCard({ name, type, temp, hum, aqi, icon, onPress, onPressArrow }: any) {
   return (
     <TouchableOpacity style={styles.roomCard} activeOpacity={0.8} onPress={onPress}>
@@ -436,6 +448,43 @@ function RoomDetailCard({ name, type, temp, hum, aqi, icon, onPress, onPressArro
         <View style={styles.metricBox}><Wind size={18} color="#0D9488" /><Text style={styles.metricValue}>{aqi}</Text><Text style={styles.metricLabel}>AQI</Text></View>
       </View>
     </TouchableOpacity>
+  );
+}
+
+// NOVO COMPONENTE: SKELETON CARD ANIMADO
+function SkeletonCard() {
+  const fadeAnim = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0.5, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [fadeAnim]);
+
+  return (
+    <Animated.View style={[styles.roomCard, { opacity: fadeAnim, backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}>
+      <View style={styles.roomHeader}>
+        <View style={styles.roomInfoMain}>
+          {/* Box do Ícone Skeleton */}
+          <View style={[styles.roomIconBox, { backgroundColor: '#E2E8F0' }]} />
+          <View>
+            {/* Texto Título Skeleton */}
+            <View style={{ width: 120, height: 18, backgroundColor: '#E2E8F0', borderRadius: 6, marginBottom: 8 }} />
+            {/* Texto Subtítulo Skeleton */}
+            <View style={{ width: 80, height: 14, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+          </View>
+        </View>
+      </View>
+      <View style={styles.metricsRow}>
+        {/* Métricas Skeleton */}
+        <View style={[styles.metricBox, { backgroundColor: '#E2E8F0', height: 60 }]} />
+        <View style={[styles.metricBox, { backgroundColor: '#E2E8F0', height: 60 }]} />
+        <View style={[styles.metricBox, { backgroundColor: '#E2E8F0', height: 60 }]} />
+      </View>
+    </Animated.View>
   );
 }
 
