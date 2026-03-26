@@ -80,20 +80,11 @@ export default function AmbienteDetalhes() {
 
     if (!id || !empresa || !db) return;
 
-    // 1. Listener do Ambiente (Dados Atuais)
+    // 1. Listener do Ambiente (Apenas Dados Fixos do local: Tipo, Andar, etc.)
     const ambRef = doc(db, "empresas", String(empresa), "ambientes", String(id));
     const unsubAmbiente = onSnapshot(ambRef, (docSnap) => {
       if (docSnap.exists()) {
         const d = docSnap.data();
-        const s = d.sensores || {};
-        // Adicionado um fallback duplo para garantir que busca tanto do map "sensores" quanto direto da raiz
-        setSensores({
-          temperatura: s.temperatura ?? d.temperatura ?? '--',
-          umidade: s.umidade ?? d.umidade ?? '--',
-          co2: s.co2 ?? d.co2 ?? '--',
-          indice_geral: d.indice_conforto ?? s.indice_geral ?? 0,
-          particulas: s.particulas ?? d.particulas ?? '--'
-        });
         setCaracteristicas({
           tipo: d.tipo || 'Tipo',
           andar: d.andar || 'Localização'
@@ -101,17 +92,31 @@ export default function AmbienteDetalhes() {
       }
     }, (error) => console.error("Erro Snapshot Ambiente:", error));
 
-    // 2. Listener do Histórico (Para os Gráficos)
+    // 2. Listener do Histórico (Para Gráficos E Dados Atuais dos Sensores)
+    // Usando exatamente o caminho: empresas > empresa > ambientes > ambiente > historico
     const histRef = collection(db, "empresas", String(empresa), "ambientes", String(id), "historico");
     const qHist = query(histRef, orderBy("timestamp", "desc"), limit(5));
     
     const unsubHistorico = onSnapshot(qHist, (snap) => {
+      // Atualiza os cards de sensores com as informações do ID de salvamento mais recente
+      if (!snap.empty) {
+        const maisRecente = snap.docs[0].data(); // Pega as informações no campo dentro do documento (ex: registro_inicial)
+        setSensores({
+          temperatura: maisRecente.temperatura ?? '--',
+          umidade: maisRecente.umidade ?? '--',
+          co2: maisRecente.co2 ?? '--',
+          indice_geral: maisRecente.indice_conforto ?? maisRecente.indice_geral ?? 0,
+          particulas: maisRecente.particulas ?? '--'
+        });
+      }
+
       const labels: string[] = [];
       const temps: number[] = [];
       const umids: number[] = [];
       const co2s: number[] = [];
       const arQualidade: number[] = [];
 
+      // Reverte a ordem apenas para exibição correta no gráfico (tempo mais antigo à esquerda)
       const docs = snap.docs.reverse();
 
       docs.forEach(docSnap => {
@@ -119,7 +124,6 @@ export default function AmbienteDetalhes() {
         
         let timeStr = "--:--";
         if (data.timestamp) {
-          // Ajuste fino: suporta tanto Timestamp do Firebase (.toDate) quanto string ISO
           const dateObj = data.timestamp.toDate ? data.timestamp.toDate() : new Date(data.timestamp);
           const hh = dateObj.getHours().toString().padStart(2, '0');
           const mm = dateObj.getMinutes().toString().padStart(2, '0');
@@ -140,25 +144,23 @@ export default function AmbienteDetalhes() {
       }
     }, (error) => console.error("Erro Snapshot Histórico:", error));
 
-    // 3. Listener dos Periféricos (Nova Lógica)
+    // 3. Listener dos Periféricos
     const perRef = collection(db, "empresas", String(empresa), "ambientes", String(id), "perifericos");
     const unsubPerifericos = onSnapshot(perRef, (snap) => {
       const listaAtualizada: any[] = [];
       
       if (!snap.empty) {
         snap.docs.forEach(docSnap => {
-          const tipoDocId = docSnap.id; // Ex: 'ar_condicionado'
+          const tipoDocId = docSnap.id; 
           const data = docSnap.data();
           
-          // Itera pelas chaves do documento (Ex: 'Ar_Condicionado_1')
           Object.entries(data).forEach(([nomeChave, propriedades]: [string, any]) => {
-            // Ignora lixo de banco se houver (caso alguém tenha salvo "tipo" ou "sensores" direto)
             if (nomeChave === 'tipo' || nomeChave === 'sensores') return;
 
             if (typeof propriedades === 'object' && propriedades !== null) {
               listaAtualizada.push({
                 docId: tipoDocId,
-                nomeId: nomeChave, // Usado para referenciar no updateDoc
+                nomeId: nomeChave, 
                 nome: nomeChave.replace(/_/g, ' '),
                 tipo: tipoDocId.replace(/_/g, ' '),
                 marca: propriedades.marca || '--',
@@ -185,7 +187,6 @@ export default function AmbienteDetalhes() {
     router.replace('/');
   };
 
-  // Alterado para receber o periférico específico
   const toggleSwitch = async (perifericoAtual: any) => {
     if (loadingPeriferico || !empresa || !id || !db) return;
     
@@ -196,7 +197,6 @@ export default function AmbienteDetalhes() {
       const perDocRef = doc(db, "empresas", String(empresa), "ambientes", String(id), "perifericos", perifericoAtual.docId);
       
       const updateData: any = {};
-      // Atualiza especificamente o objeto do mapa (ex: "Ar_Central.status")
       updateData[`${perifericoAtual.nomeId}.status`] = novoStatus;
       
       await updateDoc(perDocRef, updateData);
@@ -305,7 +305,7 @@ export default function AmbienteDetalhes() {
               </View>
             </View>
 
-            {/* GRÁFICO 2: CO2 E QUALIDADE DO AR (Novo Gráfico) */}
+            {/* GRÁFICO 2: CO2 E QUALIDADE DO AR */}
             <View style={styles.cardMain}>
               <Text style={styles.cardTitle}>Histórico de CO₂ e Partículas</Text>
               <LineChart
@@ -330,7 +330,6 @@ export default function AmbienteDetalhes() {
           </View>
         ) : (
           perifericosList.length > 0 ? (
-            // Agora renderiza em Lista para todos os periféricos lidos no BD
             perifericosList.map((p, index) => (
               <View key={`${p.docId}-${p.nomeId}-${index}`} style={[styles.peripheralCard, { marginBottom: 15 }]}>
                 <View style={styles.peripheralHeader}>

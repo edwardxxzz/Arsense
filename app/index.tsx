@@ -137,7 +137,8 @@ export default function LoginScreen() {
           qualidade_ar: 100,
           temperatura: 0,
           timestamp: dataAtualIso,
-          umidade: 0
+          umidade: 0,
+          indice_geral:0,
         });
 
         // NOVA ESTRUTURA: Subcoleção 'perifericos' do ambiente_1

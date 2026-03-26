@@ -351,8 +351,8 @@ export default function DashboardScreen() {
               hum={`${item.umidade}%`}
               aqi={item.co2}
               icon={<LayoutGrid color="#0369A1" size={24}/>}
-              /* ATUALIZADO AQUI COM AS VARIÁVEIS DE ROTA CORRETAS */
-              onPress={() => router.push({ pathname: '/ambiente', params: { id: item.id, nomeExibicao: item.nomeExibicao, empresaId: userEmpresaId } })}
+              /* VARIÁVEIS DE ROTA CORRIGIDAS AQUI (nome e empresa em vez de nomeExibicao e empresaId) */
+              onPress={() => router.push({ pathname: '/ambiente', params: { id: item.id, nome: item.nomeExibicao, empresa: userEmpresaId } })}
               onPressArrow={() => setMenuVisibleId(menuVisibleId === item.id ? null : item.id)}
             />
             {menuVisibleId === item.id && (
