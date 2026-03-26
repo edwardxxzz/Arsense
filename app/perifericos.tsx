@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,12 @@ import {
   Image,
   Modal,
   Pressable,
-  Switch, // Importante para o design original
+  Switch,
   Alert,
   ActivityIndicator,
   TextInput,
-  FlatList
+  FlatList,
+  Animated
 } from 'react-native';
 import { 
   Bell, Plus, Zap, Building2, BarChart3, FileText,
@@ -23,11 +24,10 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router'; 
 
-// --- FIREBASE FIRESTORE MIGRATION ---
 import { auth, db } from '../services/firebaseConfig';
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { 
-  collection, doc, onSnapshot, getDocs, setDoc, updateDoc, deleteDoc, 
+  collection, doc, getDocs, setDoc, updateDoc, 
   query, where, collectionGroup 
 } from "firebase/firestore";
 
@@ -35,13 +35,13 @@ const { width } = Dimensions.get('window');
 const LogoImg = require('../assets/images/logo.png'); 
 
 interface PerifericoData {
-  id: string;
-  nome: string;
-  tipo: string;
-  localizacao: string;
-  marca: string;
-  capacidade?: string;
-  status: boolean;
+  id: string; 
+  nome: string; 
+  tipo: string; 
+  localizacao: string; 
+  marca: string; 
+  capacidade?: string; 
+  status: boolean; 
   ambienteId: string;
 }
 
@@ -53,6 +53,7 @@ export default function PerifericosScreen() {
   const [isAdding, setIsAdding] = useState(false); 
   const [isEditing, setIsEditing] = useState(false);
   const [menuVisibleId, setMenuVisibleId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true); 
   
   // Estados de Dados
   const [perifericos, setPerifericos] = useState<PerifericoData[]>([]);
@@ -64,8 +65,8 @@ export default function PerifericosScreen() {
   const [ambientesDisponiveis, setAmbientesDisponiveis] = useState<{id: string, nome: string}[]>([]);
   const [showAmbienteModal, setShowAmbienteModal] = useState(false);
   const [formNome, setFormNome] = useState('');
-  const [formAmbiente, setFormAmbiente] = useState(''); // Nome exibição
-  const [formAmbienteId, setFormAmbienteId] = useState(''); // ID documento
+  const [formAmbiente, setFormAmbiente] = useState(''); 
+  const [formAmbienteId, setFormAmbienteId] = useState(''); 
   const [formTipo, setFormTipo] = useState('');
   const [formMarca, setFormMarca] = useState('');
   const [formCapacidade, setFormCapacidade] = useState('');
@@ -73,10 +74,12 @@ export default function PerifericosScreen() {
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
+      if (!user) {
+        setIsLoading(false); 
+        return;
+      }
 
       try {
-        // 1. Descobrir Empresa
         const userQuery = query(collectionGroup(db, 'usuarios'), where('userId', '==', user.uid));
         const userSnapshot = await getDocs(userQuery);
 
@@ -86,19 +89,17 @@ export default function PerifericosScreen() {
           
           if (foundEmpresaId) {
             setEmpresaId(foundEmpresaId);
-
-            // Dados do usuário
             const dataUser = userDoc.data();
             const nomeEncontrado = dataUser.userName || "Usuário";
             const iniciais = nomeEncontrado.split(' ').filter((n: string) => n.length > 0).map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
             setUserData({ nome: nomeEncontrado, email: user.email || "", iniciais });
 
-            // 2. Carregar Ambientes e Periféricos
             carregarDados(foundEmpresaId);
           }
         }
       } catch (error) {
         console.error("Erro auth:", error);
+        setIsLoading(false);
       }
     });
 
@@ -113,31 +114,43 @@ export default function PerifericosScreen() {
       const listaAmbientes: {id: string, nome: string}[] = [];
       const listaPerifericos: PerifericoData[] = [];
 
-      // Itera sobre ambientes
       const promises = ambientesSnap.docs.map(async (docAmb) => {
         const ambId = docAmb.id;
         const ambNome = docAmb.id.replace(/_/g, ' ');
         
-        // Adiciona à lista de disponíveis (exceto Ambiente_1)
-        if (ambId !== 'Ambiente_1') {
+        if (ambId.toLowerCase() !== 'ambiente_1') {
           listaAmbientes.push({ id: ambId, nome: ambNome });
         }
 
-        // Busca periféricos
         const perRef = collection(db, "empresas", empId, "ambientes", ambId, "perifericos");
         const perSnap = await getDocs(perRef);
         
-        perSnap.forEach((docPer) => {
-          const data = docPer.data();
-          listaPerifericos.push({
-            id: docPer.id,
-            nome: docPer.id.replace(/_/g, ' '),
-            tipo: data.tipo || 'Outro',
-            localizacao: ambNome,
-            marca: data.marca || "Genérico",
-            capacidade: data.capacidade || "",
-            status: data.status || false,
-            ambienteId: ambId
+        perSnap.forEach((docType) => {
+          const deviceType = docType.id;
+          const data = docType.data();
+          
+          Object.entries(data).forEach(([key, value]: [string, any]) => {
+            // Oculta chaves do sistema e o periférico "geral"
+            if (
+                key === 'sensores' || 
+                key === 'sensoresGerais' || 
+                key === 'tipo' || 
+                key === 'id' || 
+                key.toLowerCase() === 'geral' 
+            ) return;
+            
+            if (typeof value === 'object' && value !== null) {
+                listaPerifericos.push({
+                  id: key, 
+                  nome: key.replace(/_/g, ' '), 
+                  tipo: deviceType, 
+                  localizacao: ambNome,
+                  marca: value.marca || "Genérico",
+                  capacidade: value.capacidade || "",
+                  status: value.status || false,
+                  ambienteId: ambId
+                });
+            }
           });
         });
       });
@@ -146,8 +159,10 @@ export default function PerifericosScreen() {
       
       setAmbientesDisponiveis(listaAmbientes);
       setPerifericos(listaPerifericos);
+      setIsLoading(false); 
     } catch (error) {
       console.error("Erro ao carregar:", error);
+      setIsLoading(false);
     }
   };
 
@@ -157,34 +172,57 @@ export default function PerifericosScreen() {
       return;
     }
 
+    // Impede o usuário de criar algo chamado "Geral"
+    if (formNome.trim().toLowerCase() === 'geral') {
+      Alert.alert("Atenção", "O nome 'Geral' é reservado pelo sistema. Por favor, escolha outro nome.");
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const perId = formNome.replace(/ /g, '_').toLowerCase();
-      const perRef = doc(db, "empresas", empresaId, "ambientes", formAmbienteId, "perifericos", perId);
+      const formattedPerNameId = formNome.trim(); 
+      const formattedDeviceTypeId = formTipo.replace(/ /g, '_').toLowerCase(); 
       
+      const perDocRef = doc(db, "empresas", empresaId, "ambientes", formAmbienteId, "perifericos", formattedDeviceTypeId);
+      
+      const peripheralPayload = {
+        marca: formMarca || "Genérico",
+        capacidade: formCapacidade || "",
+        status: isEditing && selectedPerif ? selectedPerif.status : false 
+      };
+
       if (isEditing && selectedPerif) {
-        // Atualizar
-        await updateDoc(perRef, {
-          tipo: formTipo,
-          marca: formMarca || "Genérico",
-          capacidade: formCapacidade || ""
-          // Status não muda aqui
-        });
+        const updateData: any = {};
+        updateData[selectedPerif.id] = peripheralPayload;
+        await updateDoc(perDocRef, updateData);
         Alert.alert("Sucesso", "Periférico atualizado!");
       } else {
-        // Criar
-        await setDoc(perRef, {
-          tipo: formTipo,
-          marca: formMarca || "Genérico",
-          capacidade: formCapacidade || "",
-          status: false
-        });
+        const docSnap = await getDocs(collection(db, "empresas", empresaId, "ambientes", formAmbienteId, "perifericos"));
+        const docRef = docSnap.docs.find(d => d.id === formattedDeviceTypeId);
+        
+        if (docRef && docRef.exists()) {
+            const data: any = docRef.data();
+            if (data[formattedPerNameId]) {
+                Alert.alert("Erro", "Já existe um periférico com este nome neste ambiente.");
+                setIsSaving(false);
+                return;
+            }
+            data[formattedPerNameId] = peripheralPayload;
+            await setDoc(perDocRef, data); 
+        } else {
+            // ---- ALTERAÇÃO FEITA AQUI ----
+            // Cria apenas o mapa do periférico, sem criar a string "tipo" nem o map "sensores"
+            const newData: any = {};
+            newData[formattedPerNameId] = peripheralPayload;
+            await setDoc(perDocRef, newData);
+        }
+        
         Alert.alert("Sucesso", "Periférico criado!");
       }
 
       setIsAdding(false);
       resetForm();
-      carregarDados(empresaId); // Recarrega lista
+      carregarDados(empresaId); 
     } catch (error) {
       console.error(error);
       Alert.alert("Erro", "Falha na operação.");
@@ -198,7 +236,7 @@ export default function PerifericosScreen() {
     setFormNome(item.nome);
     setFormAmbiente(item.localizacao);
     setFormAmbienteId(item.ambienteId);
-    setFormTipo(item.tipo);
+    setFormTipo(item.tipo); 
     setFormMarca(item.marca);
     setFormCapacidade(item.capacidade || '');
     setIsEditing(true);
@@ -213,9 +251,21 @@ export default function PerifericosScreen() {
       { text: "Excluir", style: "destructive", onPress: async () => {
         if(!empresaId) return;
         try {
-          await deleteDoc(doc(db, "empresas", empresaId, "ambientes", item.ambienteId, "perifericos", item.id));
-          carregarDados(empresaId);
+          const perDocRef = doc(db, "empresas", empresaId, "ambientes", item.ambienteId, "perifericos", item.tipo);
+          
+          const docSnap = await getDocs(collection(db, "empresas", empresaId, "ambientes", item.ambienteId, "perifericos"));
+          const docRef = docSnap.docs.find(d => d.id === item.tipo);
+          
+          if (docRef && docRef.exists()) {
+              const data = docRef.data();
+              delete data[item.id]; 
+              await setDoc(perDocRef, data); 
+              carregarDados(empresaId);
+          } else {
+              Alert.alert("Erro", "Periférico não encontrado no Firebase.");
+          }
         } catch (e) {
+          console.error(e);
           Alert.alert("Erro", "Falha ao excluir.");
         }
       }}
@@ -253,25 +303,26 @@ export default function PerifericosScreen() {
           <Text style={styles.headerSubtitle}>Controle seus dispositivos conectados</Text>
         </View>
 
-        {/* BOTÃO NOVO PADRÃO ANTIGO */}
         <TouchableOpacity style={styles.btnNewItem} onPress={() => { resetForm(); setIsAdding(true); }}>
           <Plus color="#FFF" size={20} />
           <Text style={styles.btnNewItemText}>Novo Periférico</Text>
         </TouchableOpacity>
 
-        {perifericos.length > 0 ? (
+        {isLoading ? (
+          [1, 2, 3, 4].map((item) => <SkeletonCard key={item} />)
+        ) : perifericos.length > 0 ? (
           perifericos.map((p) => (
             <View key={`${p.ambienteId}-${p.id}`} style={{ zIndex: menuVisibleId === p.id ? 100 : 1 }}>
                 <PeripheralCard 
-                    title={p.nome}
-                    subtitle={p.tipo}
+                    title={p.nome} 
+                    subtitle={p.tipo} 
                     location={p.localizacao}
                     brand={p.marca}
                     status={p.status}
-                    // Passando IDs para o card poder atualizar o Firestore
                     empresaId={empresaId}
                     ambienteId={p.ambienteId}
-                    perifericoId={p.id}
+                    deviceType={p.tipo} 
+                    perifericoId={p.id} 
                     icon={p.tipo.toLowerCase().includes('ar') ? <Snowflake color="#06B6D4" size={24}/> : <Sun color="#06B6D4" size={24}/>}
                     onPress={() => router.push('/periferico')}
                     onMore={() => setMenuVisibleId(menuVisibleId === p.id ? null : p.id)}
@@ -296,7 +347,7 @@ export default function PerifericosScreen() {
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* MODAL DO FORMULÁRIO (Design mantido) */}
+      {/* MODAL DO FORMULÁRIO */}
       <Modal visible={isAdding} transparent animationType="fade">
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
@@ -305,7 +356,7 @@ export default function PerifericosScreen() {
 
             {!isEditing && (
               <>
-                <Text style={styles.label}>Nome *</Text>
+                <Text style={styles.label}>Nome * (Chave no Banco de Dados)</Text>
                 <View style={styles.inputBox}>
                   <TextInput style={styles.input} placeholder="Ex: Ar Condicionado Principal" value={formNome} onChangeText={setFormNome} />
                 </View>
@@ -316,9 +367,9 @@ export default function PerifericosScreen() {
                   <ChevronDown color="#64748B" size={20} />
                 </TouchableOpacity>
 
-                <Text style={styles.label}>Tipo *</Text>
+                <Text style={styles.label}>Tipo * (Documento no Banco de Dados)</Text>
                 <View style={styles.inputBox}>
-                  <TextInput style={styles.input} placeholder="Ex: Ar Condicionado" value={formTipo} onChangeText={setFormTipo} />
+                  <TextInput style={styles.input} placeholder="Ex: arcondicionado, ventilador" value={formTipo} onChangeText={setFormTipo} />
                 </View>
               </>
             )}
@@ -369,7 +420,7 @@ export default function PerifericosScreen() {
         </View>
       </Modal>
 
-      {/* MODAL PERFIL (Padrão) */}
+      {/* MODAL PERFIL */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -409,21 +460,24 @@ export default function PerifericosScreen() {
   );
 }
 
-// --- COMPONENTE DO CARD (Design Antigo Restaurado) ---
-function PeripheralCard({ title, subtitle, location, brand, icon, status, empresaId, ambienteId, perifericoId, onPress, onMore }: any) {
+// --- SUBCOMPONENTES ---
+
+function PeripheralCard({ title, subtitle, location, brand, icon, status, empresaId, ambienteId, deviceType, perifericoId, onPress, onMore }: any) {
   const [loading, setLoading] = useState(false);
 
   const toggleSwitch = async () => {
     if (loading || !empresaId) return;
     setLoading(true);
     
-    // Otimista: Atualiza visual imediatamente (opcional, mas bom para UX)
-    // Aqui vamos direto no Firestore para garantir consistência com o estado 'status' que vem das props
-    
     try {
-      const perRef = doc(db, "empresas", empresaId, "ambientes", ambienteId, "perifericos", perifericoId);
-      await updateDoc(perRef, { status: !status });
+      const perDocRef = doc(db, "empresas", empresaId, "ambientes", ambienteId, "perifericos", deviceType);
+      
+      const updateData: any = {};
+      updateData[`${perifericoId}.status`] = !status;
+      
+      await updateDoc(perDocRef, updateData);
     } catch (error) {
+      console.error(error);
       Alert.alert("Erro", "Falha ao atualizar status.");
     } finally {
       setLoading(false);
@@ -464,6 +518,45 @@ function PeripheralCard({ title, subtitle, location, brand, icon, status, empres
   );
 }
 
+function SkeletonCard() {
+  const fadeAnim = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0.5, duration: 800, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [fadeAnim]);
+
+  return (
+    <Animated.View style={[styles.peripheralCard, { opacity: fadeAnim, borderColor: '#E2E8F0' }]}>
+      <View style={styles.peripheralHeader}>
+        <View style={styles.peripheralInfoMain}>
+          <View style={[styles.peripheralIconBox, { backgroundColor: '#E2E8F0' }]} />
+          <View style={{flex: 1}}>
+            <View style={{ width: width * 0.4, height: 16, backgroundColor: '#E2E8F0', borderRadius: 6, marginBottom: 8 }} />
+            <View style={{ width: width * 0.25, height: 12, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+          </View>
+          <View style={{ width: 20, height: 20, backgroundColor: '#E2E8F0', borderRadius: 10, padding: 8}} />
+        </View>
+      </View>
+      <View style={styles.cardSeparator} />
+      <View style={styles.peripheralFooter}>
+        <View>
+          <View style={{ width: 100, height: 14, backgroundColor: '#E2E8F0', borderRadius: 6, marginBottom: 6 }} />
+          <View style={{ width: 60, height: 10, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+        </View>
+        <View style={styles.switchRow}>
+          <View style={{ width: 50, height: 13, backgroundColor: '#E2E8F0', borderRadius: 6, marginRight: 10 }} />
+          <View style={{ width: 45, height: 24, backgroundColor: '#E2E8F0', borderRadius: 12 }} />
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
 function TabItem({ icon, active, onPress }: any) {
   return (
     <TouchableOpacity style={styles.tabItem} onPress={onPress}>
@@ -473,7 +566,8 @@ function TabItem({ icon, active, onPress }: any) {
   );
 }
 
-// --- ESTILOS (Design Antigo Restaurado) ---
+// --- ESTILOS ---
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   topAppBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 5, backgroundColor: '#FFF' },
@@ -486,12 +580,8 @@ const styles = StyleSheet.create({
   headerSection: { marginBottom: 20 },
   headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#000' },
   headerSubtitle: { fontSize: 14, color: '#64748B' },
-  
-  // Botão Novo Item (Estilo Antigo)
   btnNewItem: { backgroundColor: '#2563EB', height: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 25 },
   btnNewItemText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  
-  // Card (Estilo Antigo)
   peripheralCard: { backgroundColor: '#FFF', borderRadius: 20, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#F1F5F9', elevation: 2 },
   peripheralHeader: { marginBottom: 15 },
   peripheralInfoMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -504,20 +594,16 @@ const styles = StyleSheet.create({
   brandText: { fontSize: 11, color: '#94A3B8' },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   statusText: { fontSize: 13, fontWeight: '600' },
-
-  // Menu de Ações
   actionMenu: { position: 'absolute', right: 30, top: 50, backgroundColor: '#FFF', borderRadius: 12, width: 130, elevation: 15, borderWidth: 1, borderColor: '#F1F5F9', padding: 5, zIndex: 999 },
   menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
   menuText: { fontSize: 14, fontWeight: '500', color: '#475569' },
-
-  // Formulários (Estilo Antigo)
   formOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 20 },
   formCard: { backgroundColor: '#FFF', borderRadius: 25, padding: 25 },
   formTitle: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', color: '#000', marginBottom: 5 },
   formSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 25 },
   label: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 8 },
   inputBox: { height: 55, borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  input: { flex: 1, height: '90%', fontSize: 15, color: '#000' },
+  input: { flex: 1, height: '90%', fontSize: 15, color: '#000', outlineWidth: 0 },
   inputText: { fontSize: 15 },
   row: { flexDirection: 'row' },
   formButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
@@ -525,18 +611,15 @@ const styles = StyleSheet.create({
   btnCreateForm: { flex: 1, height: 50, borderRadius: 12, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', marginLeft: 15 },
   btnCancelText: { color: '#64748B', fontWeight: 'bold' },
   btnCreateText: { color: '#FFF', fontWeight: 'bold' },
-
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   pickerCard: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, maxHeight: '60%' },
   pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   pickerTitle: { fontSize: 18, fontWeight: 'bold' },
   pickerItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   pickerText: { fontSize: 16, color: '#334155' },
-
   bottomTab: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 75, backgroundColor: '#FFF', flexDirection: 'row', borderTopWidth: 1, borderColor: '#E2E8F0', paddingBottom: 15 },
   tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   activeIndicator: { position: 'absolute', bottom: 10, width: 4, height: 4, borderRadius: 2, backgroundColor: '#2563EB' },
-  
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
   modalBackdrop: { flex: 0.15 },
   profileSheet: { flex: 0.85, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },

@@ -42,7 +42,9 @@ export default function AmbienteDetalhes() {
   const [userData, setUserData] = useState({ nome: 'Usuário', email: '', iniciais: 'US' });
   const [sensores, setSensores] = useState({ temperatura: '--', umidade: '--', co2: '--', indice_geral: 0, particulas: '--' });
   const [caracteristicas, setCaracteristicas] = useState({ tipo: 'Tipo', andar: 'Localização' });
-  const [periferico, setPeriferico] = useState({ nome: '', tipo: 'Ar Condicionado', marca: '--', status: false, docId: '' });
+  
+  // Transformado em Lista para suportar os mapas de periféricos múltiplos
+  const [perifericosList, setPerifericosList] = useState<any[]>([]);
 
   // Estado para armazenar os dados do histórico para os gráficos
   const [historyData, setHistoryData] = useState({
@@ -84,12 +86,13 @@ export default function AmbienteDetalhes() {
       if (docSnap.exists()) {
         const d = docSnap.data();
         const s = d.sensores || {};
+        // Adicionado um fallback duplo para garantir que busca tanto do map "sensores" quanto direto da raiz
         setSensores({
-          temperatura: s.temperatura ?? '--',
-          umidade: s.umidade ?? '--',
-          co2: s.co2 ?? '--',
-          indice_geral: d.indice_conforto || s.indice_geral || 0,
-          particulas: s.particulas ?? '--'
+          temperatura: s.temperatura ?? d.temperatura ?? '--',
+          umidade: s.umidade ?? d.umidade ?? '--',
+          co2: s.co2 ?? d.co2 ?? '--',
+          indice_geral: d.indice_conforto ?? s.indice_geral ?? 0,
+          particulas: s.particulas ?? d.particulas ?? '--'
         });
         setCaracteristicas({
           tipo: d.tipo || 'Tipo',
@@ -100,7 +103,6 @@ export default function AmbienteDetalhes() {
 
     // 2. Listener do Histórico (Para os Gráficos)
     const histRef = collection(db, "empresas", String(empresa), "ambientes", String(id), "historico");
-    // Busca os últimos 5 registros ordenados pelo mais recente
     const qHist = query(histRef, orderBy("timestamp", "desc"), limit(5));
     
     const unsubHistorico = onSnapshot(qHist, (snap) => {
@@ -110,16 +112,15 @@ export default function AmbienteDetalhes() {
       const co2s: number[] = [];
       const arQualidade: number[] = [];
 
-      // Inverte o array para que o gráfico fique em ordem cronológica (da esquerda para direita)
       const docs = snap.docs.reverse();
 
       docs.forEach(docSnap => {
         const data = docSnap.data();
         
-        // Tenta converter o timestamp para pegar a hora
         let timeStr = "--:--";
         if (data.timestamp) {
-          const dateObj = new Date(data.timestamp);
+          // Ajuste fino: suporta tanto Timestamp do Firebase (.toDate) quanto string ISO
+          const dateObj = data.timestamp.toDate ? data.timestamp.toDate() : new Date(data.timestamp);
           const hh = dateObj.getHours().toString().padStart(2, '0');
           const mm = dateObj.getMinutes().toString().padStart(2, '0');
           timeStr = `${hh}:${mm}`;
@@ -132,7 +133,6 @@ export default function AmbienteDetalhes() {
         arQualidade.push(data.qualidade_ar || data.particulas || 0);
       });
 
-      // Se não houver dados, colocamos valores zerados para o gráfico não quebrar
       if (labels.length === 0) {
         setHistoryData({ labels: ["00:00"], temps: [0], umids: [0], co2s: [0], arQualidade: [0] });
       } else {
@@ -140,22 +140,35 @@ export default function AmbienteDetalhes() {
       }
     }, (error) => console.error("Erro Snapshot Histórico:", error));
 
-    // 3. Listener dos Periféricos
+    // 3. Listener dos Periféricos (Nova Lógica)
     const perRef = collection(db, "empresas", String(empresa), "ambientes", String(id), "perifericos");
     const unsubPerifericos = onSnapshot(perRef, (snap) => {
+      const listaAtualizada: any[] = [];
+      
       if (!snap.empty) {
-        const firstDoc = snap.docs[0];
-        const pData = firstDoc.data();
-        setPeriferico({
-          nome: firstDoc.id.replace(/_/g, ' '),
-          tipo: pData.tipo || 'Dispositivo',
-          marca: pData.marca || '--',
-          status: pData.status || false,
-          docId: firstDoc.id 
+        snap.docs.forEach(docSnap => {
+          const tipoDocId = docSnap.id; // Ex: 'ar_condicionado'
+          const data = docSnap.data();
+          
+          // Itera pelas chaves do documento (Ex: 'Ar_Condicionado_1')
+          Object.entries(data).forEach(([nomeChave, propriedades]: [string, any]) => {
+            // Ignora lixo de banco se houver (caso alguém tenha salvo "tipo" ou "sensores" direto)
+            if (nomeChave === 'tipo' || nomeChave === 'sensores') return;
+
+            if (typeof propriedades === 'object' && propriedades !== null) {
+              listaAtualizada.push({
+                docId: tipoDocId,
+                nomeId: nomeChave, // Usado para referenciar no updateDoc
+                nome: nomeChave.replace(/_/g, ' '),
+                tipo: tipoDocId.replace(/_/g, ' '),
+                marca: propriedades.marca || '--',
+                status: propriedades.status || false,
+              });
+            }
+          });
         });
-      } else {
-        setPeriferico({ nome: '', tipo: '', marca: '', status: false, docId: '' });
       }
+      setPerifericosList(listaAtualizada);
     }, (error) => console.error("Erro Snapshot Perifericos:", error));
 
     return () => {
@@ -172,15 +185,21 @@ export default function AmbienteDetalhes() {
     router.replace('/');
   };
 
-  const toggleSwitch = async () => {
-    if (loadingPeriferico || !periferico.docId || !empresa || !id || !db) return;
+  // Alterado para receber o periférico específico
+  const toggleSwitch = async (perifericoAtual: any) => {
+    if (loadingPeriferico || !empresa || !id || !db) return;
     
     setLoadingPeriferico(true);
-    const novoStatus = !periferico.status;
+    const novoStatus = !perifericoAtual.status;
     
     try {
-      const perDocRef = doc(db, "empresas", String(empresa), "ambientes", String(id), "perifericos", periferico.docId);
-      await updateDoc(perDocRef, { status: novoStatus });
+      const perDocRef = doc(db, "empresas", String(empresa), "ambientes", String(id), "perifericos", perifericoAtual.docId);
+      
+      const updateData: any = {};
+      // Atualiza especificamente o objeto do mapa (ex: "Ar_Central.status")
+      updateData[`${perifericoAtual.nomeId}.status`] = novoStatus;
+      
+      await updateDoc(perDocRef, updateData);
     } catch (e) { 
       console.error("Erro ao atualizar status:", e);
       Alert.alert("Erro", "Não foi possível alterar o estado do dispositivo."); 
@@ -270,8 +289,8 @@ export default function AmbienteDetalhes() {
                 data={{
                   labels: historyData.labels,
                   datasets: [
-                    { data: historyData.temps, color: () => `#EF4444`, strokeWidth: 3 }, // Vermelho - Temp
-                    { data: historyData.umids, color: () => `#3B82F6`, strokeWidth: 3 }  // Azul - Umi
+                    { data: historyData.temps, color: () => `#EF4444`, strokeWidth: 3 }, 
+                    { data: historyData.umids, color: () => `#3B82F6`, strokeWidth: 3 }  
                   ]
                 }}
                 width={width - 80}
@@ -293,8 +312,8 @@ export default function AmbienteDetalhes() {
                 data={{
                   labels: historyData.labels,
                   datasets: [
-                    { data: historyData.co2s, color: () => `#A855F7`, strokeWidth: 3 }, // Roxo - CO2
-                    { data: historyData.arQualidade, color: () => `#10B981`, strokeWidth: 3 }  // Verde - Partículas/AR
+                    { data: historyData.co2s, color: () => `#A855F7`, strokeWidth: 3 }, 
+                    { data: historyData.arQualidade, color: () => `#10B981`, strokeWidth: 3 }  
                   ]
                 }}
                 width={width - 80}
@@ -310,26 +329,29 @@ export default function AmbienteDetalhes() {
             </View>
           </View>
         ) : (
-          periferico.nome !== '' ? (
-            <View style={styles.peripheralCard}>
-              <View style={styles.peripheralHeader}>
-                <View style={styles.peripheralIconBox}><Snowflake color="#06B6D4" size={24} /></View>
-                <View style={{flex: 1, marginLeft: 12}}>
-                  <Text style={styles.peripheralTitle}>{periferico.nome}</Text>
-                  <Text style={styles.peripheralSubtitle}>{periferico.tipo}</Text>
+          perifericosList.length > 0 ? (
+            // Agora renderiza em Lista para todos os periféricos lidos no BD
+            perifericosList.map((p, index) => (
+              <View key={`${p.docId}-${p.nomeId}-${index}`} style={[styles.peripheralCard, { marginBottom: 15 }]}>
+                <View style={styles.peripheralHeader}>
+                  <View style={styles.peripheralIconBox}><Snowflake color="#06B6D4" size={24} /></View>
+                  <View style={{flex: 1, marginLeft: 12}}>
+                    <Text style={styles.peripheralTitle}>{p.nome}</Text>
+                    <Text style={styles.peripheralSubtitle}>{p.tipo}</Text>
+                  </View>
+                  <Switch 
+                    trackColor={{ false: "#E2E8F0", true: "#0EA5E9" }} 
+                    thumbColor="#FFF" 
+                    onValueChange={() => toggleSwitch(p)} 
+                    value={p.status} 
+                    disabled={loadingPeriferico} 
+                  />
                 </View>
-                <Switch 
-                  trackColor={{ false: "#E2E8F0", true: "#0EA5E9" }} 
-                  thumbColor="#FFF" 
-                  onValueChange={toggleSwitch} 
-                  value={periferico.status} 
-                  disabled={loadingPeriferico} 
-                />
+                <View style={styles.cardSeparator} />
+                <Text style={styles.footerBrand}>{p.marca}</Text>
+                <Text style={styles.footerStatus}>Status do periférico</Text>
               </View>
-              <View style={styles.cardSeparator} />
-              <Text style={styles.footerBrand}>{periferico.marca}</Text>
-              <Text style={styles.footerStatus}>Status do periférico</Text>
-            </View>
+            ))
           ) : (
             <Text style={{textAlign: 'center', color: '#94A3B8', marginTop: 20}}>Nenhum periférico encontrado.</Text>
           )

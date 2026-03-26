@@ -13,7 +13,7 @@ import {
   Pressable,
   Alert,
   ActivityIndicator,
-  Animated // <-- Adicionado para a animação do Skeleton
+  Animated 
 } from 'react-native';
 import { 
   Bell, Plus, Search, Thermometer, Droplets, Wind, LayoutGrid, 
@@ -57,7 +57,7 @@ export default function AmbientesScreen() {
   const [searchText, setSearchText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [menuVisibleId, setMenuVisibleId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // <-- Estado de Loading adicionado
+  const [isLoading, setIsLoading] = useState(true); 
   
   // Estados de Dados
   const [ambientes, setAmbientes] = useState<AmbienteData[]>([]);
@@ -80,7 +80,7 @@ export default function AmbientesScreen() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setUserData({ nome: 'Desconhecido', email: '', iniciais: '..' });
-        setIsLoading(false); // Desliga loading se não tiver usuário
+        setIsLoading(false); 
         return;
       }
 
@@ -90,7 +90,7 @@ export default function AmbientesScreen() {
 
         if (userSnapshot.empty) {
           console.log("Usuário não encontrado em nenhuma empresa.");
-          setIsLoading(false); // Desliga loading se der erro
+          setIsLoading(false); 
           return;
         }
 
@@ -112,7 +112,8 @@ export default function AmbientesScreen() {
             snapshot.forEach((docAmb) => {
               const amb = docAmb.data();
               
-              if (docAmb.id === 'Ambiente_1') return;
+              // --- CORREÇÃO AQUI: Filtro case-insensitive para não aparecer o ambiente 1 ---
+              if (docAmb.id.toLowerCase() === 'ambiente_1') return;
 
               const sensores = amb.sensores || {};
               
@@ -130,7 +131,7 @@ export default function AmbientesScreen() {
             });
 
             setAmbientes(lista);
-            setIsLoading(false); // <-- Desliga o Loading quando carrega a lista do Firebase
+            setIsLoading(false); 
           });
 
           return () => unsubAmbientes();
@@ -293,9 +294,7 @@ export default function AmbientesScreen() {
           />
         </Pressable>
 
-        {/* LÓGICA DO SKELETON E LISTAGEM DOS AMBIENTES */}
         {isLoading ? (
-          // Mostra 4 Skeleton Cards enquanto carrega
           [1, 2, 3, 4].map((item) => <SkeletonCard key={item} />)
         ) : ambientesFiltrados.length > 0 ? (
           ambientesFiltrados.map((item) => (
@@ -333,7 +332,6 @@ export default function AmbientesScreen() {
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* MODAL DE ADIÇÃO/EDIÇÃO */}
       <Modal visible={isAdding} transparent animationType="fade" onRequestClose={() => setIsAdding(false)}>
         <View style={styles.modalOverlayBlack}>
           <View style={styles.formCard}>
@@ -389,7 +387,6 @@ export default function AmbientesScreen() {
         </View>
       </Modal>
 
-      {/* MODAL DE PERFIL */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -429,7 +426,6 @@ export default function AmbientesScreen() {
   );
 }
 
-// COMPONENTE DO CARD REAL
 function RoomDetailCard({ name, type, temp, hum, aqi, icon, onPress, onPressArrow }: any) {
   return (
     <TouchableOpacity style={styles.roomCard} activeOpacity={0.8} onPress={onPress}>
@@ -451,7 +447,6 @@ function RoomDetailCard({ name, type, temp, hum, aqi, icon, onPress, onPressArro
   );
 }
 
-// NOVO COMPONENTE: SKELETON CARD ANIMADO
 function SkeletonCard() {
   const fadeAnim = useRef(new Animated.Value(0.5)).current;
 
@@ -468,18 +463,14 @@ function SkeletonCard() {
     <Animated.View style={[styles.roomCard, { opacity: fadeAnim, backgroundColor: '#F8FAFC', borderColor: '#E2E8F0' }]}>
       <View style={styles.roomHeader}>
         <View style={styles.roomInfoMain}>
-          {/* Box do Ícone Skeleton */}
           <View style={[styles.roomIconBox, { backgroundColor: '#E2E8F0' }]} />
           <View>
-            {/* Texto Título Skeleton */}
             <View style={{ width: 120, height: 18, backgroundColor: '#E2E8F0', borderRadius: 6, marginBottom: 8 }} />
-            {/* Texto Subtítulo Skeleton */}
             <View style={{ width: 80, height: 14, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
           </View>
         </View>
       </View>
       <View style={styles.metricsRow}>
-        {/* Métricas Skeleton */}
         <View style={[styles.metricBox, { backgroundColor: '#E2E8F0', height: 60 }]} />
         <View style={[styles.metricBox, { backgroundColor: '#E2E8F0', height: 60 }]} />
         <View style={[styles.metricBox, { backgroundColor: '#E2E8F0', height: 60 }]} />
