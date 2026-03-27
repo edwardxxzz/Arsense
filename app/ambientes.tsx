@@ -18,7 +18,7 @@ import {
 import { 
   Bell, Plus, Search, Thermometer, Droplets, Wind, LayoutGrid, 
   Building2, Zap, BarChart3, ChevronRight, FileText, X, User, LogOut,
-  Edit2, Trash2, ChevronDown
+  Edit2, Trash2, ChevronDown, CalendarDays
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router'; 
 
@@ -27,7 +27,7 @@ import { auth, db } from '../services/firebaseConfig';
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { 
   collection, doc, onSnapshot, getDocs, setDoc, updateDoc, 
-  deleteDoc, query, where, collectionGroup 
+  deleteDoc, query, where, collectionGroup, addDoc
 } from "firebase/firestore";
 
 const { width } = Dimensions.get('window');
@@ -52,12 +52,14 @@ export default function AmbientesScreen() {
   // Estados de Controle de UI
   const [isProfileVisible, setIsProfileVisible] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [menuVisibleId, setMenuVisibleId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true); 
+  const [isSelectAmbienteOpen, setIsSelectAmbienteOpen] = useState(false);
   
   // Estados de Dados
   const [ambientes, setAmbientes] = useState<AmbienteData[]>([]);
@@ -69,12 +71,22 @@ export default function AmbientesScreen() {
     iniciais: '..' 
   });
 
-  // Estados do Formulário
+  // Estados do Formulário de Ambiente
   const [formNome, setFormNome] = useState('');
   const [formTipo, setFormTipo] = useState('');
   const [formArea, setFormArea] = useState('');
   const [formCapacidade, setFormCapacidade] = useState('');
   const [formAndar, setFormAndar] = useState('');
+
+  // Estados do Formulário de Agendamento
+  const [formAgendamento, setFormAgendamento] = useState({
+    ambienteId: '',
+    nomeAmbiente: 'Selecione o ambiente',
+    titulo: '',
+    objetivo: '',
+    data: '',
+    horario: ''
+  });
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -112,7 +124,6 @@ export default function AmbientesScreen() {
             snapshot.forEach((docAmb) => {
               const amb = docAmb.data();
               
-              // --- CORREÇÃO AQUI: Filtro case-insensitive para não aparecer o ambiente 1 ---
               if (docAmb.id.toLowerCase() === 'ambiente_1') return;
 
               const sensores = amb.sensores || {};
@@ -123,10 +134,10 @@ export default function AmbientesScreen() {
                 temperatura: sensores.temperatura !== undefined ? `${sensores.temperatura}°` : '--',
                 umidade: sensores.umidade !== undefined ? `${sensores.umidade}%` : '--',
                 co2: sensores.co2 !== undefined ? String(sensores.co2) : '--',
-                tipo: amb.tipo || '',
-                area: amb.area || '',
-                capacidade: amb.capacidade || '',
-                andar: amb.andar || '',
+                tipo: amb.config?.tipo || amb.tipo || '',
+                area: amb.config?.area || amb.area || '',
+                capacidade: amb.config?.capacidade || amb.capacidade || '',
+                andar: amb.config?.andar || amb.andar || '',
               });
             });
 
@@ -164,10 +175,10 @@ export default function AmbientesScreen() {
       if (isEditing && selectedAmbiente) {
         const ambRef = doc(ambientesRef, selectedAmbiente.id);
         await updateDoc(ambRef, {
-          tipo: formTipo,
-          area: formArea || "0",
-          capacidade: formCapacidade || "0",
-          andar: formAndar
+          "config.tipo": formTipo,
+          "config.area": formArea || "0",
+          "config.capacidade": formCapacidade || "0",
+          "config.andar": formAndar
         });
         Alert.alert("Sucesso", "Ambiente atualizado!");
       } else {
@@ -180,21 +191,29 @@ export default function AmbientesScreen() {
 
         const novoAmbRef = doc(ambientesRef, novoId);
         const payload = {
-          tipo: formTipo,
-          area: formArea || "0",
-          capacidade: formCapacidade || "0",
-          andar: formAndar,
+          config: {
+            tipo: formTipo,
+            area: formArea || "0",
+            capacidade: formCapacidade || "0",
+            andar: formAndar,
+          },
+          dados: {
+            centralid: "central1",
+            criadoEm: new Date().toISOString(),
+            nome: formNome.trim(),
+            receptor_id: "receptor1"
+          },
           sensores: { 
             temperatura: 0, 
             umidade: 0, 
             co2: 0,
-            particulas:0
+            luminosidade: 0,
           },
-          perifericos: {} 
         };
 
         await setDoc(novoAmbRef, payload);
 
+        // --- PASTA HISTÓRICO ---
         const historicoRef = collection(novoAmbRef, "historico");
         await setDoc(doc(historicoRef, "registro_inicial"), {
           timestamp: new Date().toISOString(),
@@ -202,6 +221,22 @@ export default function AmbientesScreen() {
           umidade: 0,
           co2: 0,
           qualidade_ar: 100 
+        });
+
+        // --- PASTA PERIFÉRICOS (RESTAURADA) ---
+        const perifericosRef = collection(novoAmbRef, "perifericos");
+        await setDoc(doc(perifericosRef, "registro_inicial"), {
+          timestamp: new Date().toISOString(),
+          status: "inicializado",
+          observacao: "Pasta criada automaticamente"
+        });
+
+        // --- PASTA AGENDAMENTOS (NOVA) ---
+        const agendamentosRef = collection(novoAmbRef, "agendamentos");
+        await setDoc(doc(agendamentosRef, "registro_inicial"), {
+          timestamp: new Date().toISOString(),
+          status: "inicializado",
+          observacao: "Pasta criada automaticamente"
         });
 
         Alert.alert("Sucesso", "Ambiente criado com sucesso!");
@@ -213,6 +248,35 @@ export default function AmbientesScreen() {
     } catch (e) {
       console.error(e);
       Alert.alert("Erro", "Falha ao processar operação.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSalvarAgendamento = async () => {
+    if (!formAgendamento.ambienteId || !formAgendamento.titulo || !formAgendamento.objetivo || !formAgendamento.data || !formAgendamento.horario) {
+      Alert.alert("Campos Obrigatórios", "Por favor, preencha todos os campos do agendamento.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const agendamentosRef = collection(db, "empresas", empresaId, "ambientes", formAgendamento.ambienteId, "agendamentos");
+      
+      await addDoc(agendamentosRef, {
+        titulo: formAgendamento.titulo,
+        objetivo: formAgendamento.objetivo,
+        data: formAgendamento.data,
+        horario: formAgendamento.horario,
+        criadoEm: new Date().toISOString()
+      });
+
+      Alert.alert("Sucesso", "Agendamento criado com sucesso!");
+      setIsScheduling(false);
+      setFormAgendamento({ ambienteId: '', nomeAmbiente: 'Selecione o ambiente', titulo: '', objetivo: '', data: '', horario: '' });
+    } catch (e) {
+      console.error("Erro ao agendar:", e);
+      Alert.alert("Erro", "Falha ao criar o agendamento.");
     } finally {
       setIsSaving(false);
     }
@@ -280,10 +344,16 @@ export default function AmbientesScreen() {
           <Text style={styles.headerSubtitle}>Gerencie seus locais monitorados</Text>
         </View>
 
-        <TouchableOpacity style={styles.btnNewRoom} onPress={() => { resetForm(); setIsAdding(true); }}>
-          <Plus color="#FFF" size={20} />
-          <Text style={styles.btnNewRoomText}>Novo Ambiente</Text>
-        </TouchableOpacity>
+        <View style={styles.actionButtonsRow}>
+          <TouchableOpacity style={styles.btnActionPrimary} onPress={() => { resetForm(); setIsAdding(true); }}>
+            <Plus color="#FFF" size={20} />
+            <Text style={styles.btnActionPrimaryText}>Novo Ambiente</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btnActionSecondary} onPress={() => setIsScheduling(true)}>
+            <CalendarDays color="#1E293B" size={20} />
+            <Text style={styles.btnActionSecondaryText}>Agendar Sala</Text>
+          </TouchableOpacity>
+        </View>
 
         <Pressable style={[styles.searchContainer, isFocused && styles.searchContainerFocused]} onPress={() => inputRef.current?.focus()}>
           <Search color={isFocused ? "#000" : "#64748B"} size={20} />
@@ -332,6 +402,7 @@ export default function AmbientesScreen() {
         <View style={{height: 100}} /> 
       </ScrollView>
 
+      {/* --- MODAL DE CRIAR/EDITAR AMBIENTE --- */}
       <Modal visible={isAdding} transparent animationType="fade" onRequestClose={() => setIsAdding(false)}>
         <View style={styles.modalOverlayBlack}>
           <View style={styles.formCard}>
@@ -387,6 +458,100 @@ export default function AmbientesScreen() {
         </View>
       </Modal>
 
+      {/* --- MODAL DE AGENDAR SALA --- */}
+      <Modal visible={isScheduling} transparent animationType="slide" onRequestClose={() => setIsScheduling(false)}>
+        <View style={styles.modalOverlayBlack}>
+          <View style={[styles.formCard, { paddingVertical: 35 }]}>
+            <Text style={styles.formTitle}>Agendar Sala</Text>
+            <Text style={styles.formSubtitle}>Defina um horário para climatização de ambiente</Text>
+
+            <Text style={styles.label}>Ambiente</Text>
+            <TouchableOpacity 
+              style={[styles.inputBox, { justifyContent: 'space-between' }]} 
+              onPress={() => setIsSelectAmbienteOpen(!isSelectAmbienteOpen)}
+            >
+              <Text style={{ color: formAgendamento.ambienteId ? '#000' : '#94A3B8' }}>{formAgendamento.nomeAmbiente}</Text>
+              <ChevronDown color="#94A3B8" size={20} />
+            </TouchableOpacity>
+
+            {isSelectAmbienteOpen && (
+              <View style={styles.dropdownContainer}>
+                <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                  {ambientes.map(amb => (
+                    <TouchableOpacity 
+                      key={amb.id} 
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setFormAgendamento(prev => ({ ...prev, ambienteId: amb.id, nomeAmbiente: amb.nomeExibicao }));
+                        setIsSelectAmbienteOpen(false);
+                      }}
+                    >
+                      <Text style={styles.dropdownText}>{amb.nomeExibicao}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            <Text style={styles.label}>Título da Programação *</Text>
+            <View style={styles.inputBox}>
+              <TextInput 
+                style={styles.input} 
+                placeholder="Ex: Reunião" 
+                value={formAgendamento.titulo} 
+                onChangeText={(t) => setFormAgendamento(prev => ({...prev, titulo: t}))} 
+              />
+            </View>
+
+            <Text style={styles.label}>Objetivo da Programação *</Text>
+            <View style={styles.inputBox}>
+              <TextInput 
+                style={styles.input} 
+                placeholder="Ex: Discutir sobre custos energéticos" 
+                value={formAgendamento.objetivo} 
+                onChangeText={(t) => setFormAgendamento(prev => ({...prev, objetivo: t}))} 
+              />
+            </View>
+
+            <View style={styles.row}>
+              <View style={{flex: 1}}>
+                <Text style={styles.label}>Data</Text>
+                <View style={styles.inputBox}>
+                  <TextInput 
+                    style={styles.input} 
+                    placeholder="XX/XX/XXXX" 
+                    value={formAgendamento.data} 
+                    onChangeText={(t) => setFormAgendamento(prev => ({...prev, data: t}))} 
+                  />
+                </View>
+              </View>
+              <View style={{width: 15}} />
+              <View style={{flex: 1}}>
+                <Text style={styles.label}>Horário</Text>
+                <View style={styles.inputBox}>
+                  <TextInput 
+                    style={styles.input} 
+                    placeholder="XX:XX" 
+                    value={formAgendamento.horario} 
+                    onChangeText={(t) => setFormAgendamento(prev => ({...prev, horario: t}))} 
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.formButtons}>
+              <TouchableOpacity style={styles.btnCancelForm} onPress={() => setIsScheduling(false)}>
+                <Text style={styles.btnCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnCreateForm} onPress={handleSalvarAgendamento} disabled={isSaving}>
+                {isSaving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.btnCreateText}>Criar</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* --- MODAL DE PERFIL --- */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -426,6 +591,7 @@ export default function AmbientesScreen() {
   );
 }
 
+// --- CARTÃO DE AMBIENTE ORIGINAL ---
 function RoomDetailCard({ name, type, temp, hum, aqi, icon, onPress, onPressArrow }: any) {
   return (
     <TouchableOpacity style={styles.roomCard} activeOpacity={0.8} onPress={onPress}>
@@ -447,6 +613,7 @@ function RoomDetailCard({ name, type, temp, hum, aqi, icon, onPress, onPressArro
   );
 }
 
+// --- SKELETON DO CARTÃO ORIGINAL ---
 function SkeletonCard() {
   const fadeAnim = useRef(new Animated.Value(0.5)).current;
 
@@ -497,15 +664,23 @@ const styles = StyleSheet.create({
   avatarCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 15 },
+  
   headerSection: { marginBottom: 20 },
   headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#000' },
   headerSubtitle: { fontSize: 14, color: '#64748B' },
-  btnNewRoom: { backgroundColor: '#2563EB', height: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 20 },
-  btnNewRoomText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
+  
+  // --- BOTÕES NOVOS MANTIDOS ---
+  actionButtonsRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  btnActionPrimary: { flex: 1, backgroundColor: '#2563EB', height: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnActionPrimaryText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
+  btnActionSecondary: { flex: 1, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#CBD5E1', height: 48, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  btnActionSecondaryText: { color: '#1E293B', fontWeight: 'bold', fontSize: 15 },
+  
   searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 15, height: 50, marginBottom: 25, borderWidth: 1, borderColor: '#E2E8F0', gap: 10 },
   searchContainerFocused: { borderColor: '#000', backgroundColor: '#FFF' },
-  searchInput: { flex: 1, height: '90%', fontSize: 15, color: '#1E293B' },
+  searchInput: { flex: 1, height: '90%', fontSize: 15, color: '#1E293B', outlineWidth: 0, outlineColor: "transparent" },
   
+  // --- DESIGN DE CARTÃO ORIGINAL RESTAURADO ---
   roomCard: { backgroundColor: '#F0F9FF', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: '#BAE6FD' },
   roomHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   roomInfoMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -531,13 +706,17 @@ const styles = StyleSheet.create({
   formSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 25 },
   label: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 8 },
   inputBox: { height: 55, borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  input: { flex: 1, height: '90%', fontSize: 15, color: '#000', outlineWidth:0, outlineColor:"transparent"},
+  input: { flex: 1, height: '90%', fontSize: 15, color: '#000', outlineWidth: 0, outlineColor: "transparent" },
   row: { flexDirection: 'row' },
   formButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
   btnCancelForm: { flex: 1, height: 50, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center' },
   btnCreateForm: { flex: 1, height: 50, borderRadius: 12, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center', marginLeft: 15 },
   btnCancelText: { color: '#64748B', fontWeight: 'bold' },
   btnCreateText: { color: '#FFF', fontWeight: 'bold' },
+
+  dropdownContainer: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginTop: -15, marginBottom: 18, elevation: 2 },
+  dropdownItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  dropdownText: { fontSize: 15, color: '#1E293B' },
   
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
   modalBackdrop: { flex: 0.15 },

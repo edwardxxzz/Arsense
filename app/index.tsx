@@ -122,7 +122,7 @@ export default function LoginScreen() {
             receptor_id: "receptor1"
           },
           sensores: {
-            iluminação: 0,
+            luminosidade: 0,
             presenca: false,
             temperatura: 0,
             umidade: 0

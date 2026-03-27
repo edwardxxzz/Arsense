@@ -4,7 +4,7 @@ import {
   Image, Dimensions, Switch, Alert, Modal, Pressable
 } from 'react-native';
 import { 
-  ArrowLeft, Bell, Thermometer, Droplets, Atom, Wind, Snowflake, X, User, LogOut, ChevronRight
+  ArrowLeft, Bell, Thermometer, Droplets, Lightbulb, Snowflake, X, User, LogOut, ChevronRight
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
@@ -35,33 +35,31 @@ export default function AmbienteDetalhes() {
   const params = useLocalSearchParams<{ id: string; nome: string; empresa: string }>();
   const { id, nome, empresa } = params;
   
-  const [tab, setTab] = useState<'historico' | 'perifericos'>('historico');
+  // Adicionado 'agendamentos' aos tipos de tab
+  const [tab, setTab] = useState<'historico' | 'perifericos' | 'agendamentos'>('historico');
   const [loadingPeriferico, setLoadingPeriferico] = useState(false);
   const [isProfileVisible, setIsProfileVisible] = useState(false);
   
   const [userData, setUserData] = useState({ nome: 'Usuário', email: '', iniciais: 'US' });
-  const [sensores, setSensores] = useState({ temperatura: '--', umidade: '--', co2: '--', indice_geral: 0, particulas: '--' });
+  // Substituído co2 e particulas por luminosidade
+  const [sensores, setSensores] = useState({ temperatura: '--', umidade: '--', luminosidade: '--', indice_geral: 0 });
   const [caracteristicas, setCaracteristicas] = useState({ tipo: 'Tipo', andar: 'Localização' });
   
-  // Transformado em Lista para suportar os mapas de periféricos múltiplos
   const [perifericosList, setPerifericosList] = useState<any[]>([]);
 
-  // Estado para armazenar os dados do histórico para os gráficos
+  // Atualizado para contemplar luminosidade no histórico
   const [historyData, setHistoryData] = useState({
     labels: ["00:00"],
     temps: [0],
     umids: [0],
-    co2s: [0],
-    arQualidade: [0]
+    lumins: [0]
   });
 
-  // Lógica do Gráfico Circular
   const radius = 55;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (sensores.indice_geral / 100) * circumference;
 
   useEffect(() => {
-    // Listener de Autenticação
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
@@ -80,7 +78,6 @@ export default function AmbienteDetalhes() {
 
     if (!id || !empresa || !db) return;
 
-    // 1. Listener do Ambiente (Apenas Dados Fixos do local: Tipo, Andar, etc.)
     const ambRef = doc(db, "empresas", String(empresa), "ambientes", String(id));
     const unsubAmbiente = onSnapshot(ambRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -92,31 +89,26 @@ export default function AmbienteDetalhes() {
       }
     }, (error) => console.error("Erro Snapshot Ambiente:", error));
 
-    // 2. Listener do Histórico (Para Gráficos E Dados Atuais dos Sensores)
-    // Usando exatamente o caminho: empresas > empresa > ambientes > ambiente > historico
     const histRef = collection(db, "empresas", String(empresa), "ambientes", String(id), "historico");
     const qHist = query(histRef, orderBy("timestamp", "desc"), limit(5));
     
     const unsubHistorico = onSnapshot(qHist, (snap) => {
-      // Atualiza os cards de sensores com as informações do ID de salvamento mais recente
       if (!snap.empty) {
-        const maisRecente = snap.docs[0].data(); // Pega as informações no campo dentro do documento (ex: registro_inicial)
+        const maisRecente = snap.docs[0].data(); 
+        // Atualizado para pegar a luminosidade e remover co2/particulas
         setSensores({
           temperatura: maisRecente.temperatura ?? '--',
           umidade: maisRecente.umidade ?? '--',
-          co2: maisRecente.co2 ?? '--',
+          luminosidade: maisRecente.luminosidade ?? '--',
           indice_geral: maisRecente.indice_conforto ?? maisRecente.indice_geral ?? 0,
-          particulas: maisRecente.particulas ?? '--'
         });
       }
 
       const labels: string[] = [];
       const temps: number[] = [];
       const umids: number[] = [];
-      const co2s: number[] = [];
-      const arQualidade: number[] = [];
+      const lumins: number[] = [];
 
-      // Reverte a ordem apenas para exibição correta no gráfico (tempo mais antigo à esquerda)
       const docs = snap.docs.reverse();
 
       docs.forEach(docSnap => {
@@ -133,18 +125,16 @@ export default function AmbienteDetalhes() {
         labels.push(timeStr);
         temps.push(data.temperatura || 0);
         umids.push(data.umidade || 0);
-        co2s.push(data.co2 || 0);
-        arQualidade.push(data.qualidade_ar || data.particulas || 0);
+        lumins.push(data.luminosidade || 0);
       });
 
       if (labels.length === 0) {
-        setHistoryData({ labels: ["00:00"], temps: [0], umids: [0], co2s: [0], arQualidade: [0] });
+        setHistoryData({ labels: ["00:00"], temps: [0], umids: [0], lumins: [0] });
       } else {
-        setHistoryData({ labels, temps, umids, co2s, arQualidade });
+        setHistoryData({ labels, temps, umids, lumins });
       }
     }, (error) => console.error("Erro Snapshot Histórico:", error));
 
-    // 3. Listener dos Periféricos
     const perRef = collection(db, "empresas", String(empresa), "ambientes", String(id), "perifericos");
     const unsubPerifericos = onSnapshot(perRef, (snap) => {
       const listaAtualizada: any[] = [];
@@ -230,17 +220,20 @@ export default function AmbienteDetalhes() {
         <View style={styles.titleSection}>
           <TouchableOpacity onPress={() => router.back()}><ArrowLeft color="#000" size={32} /></TouchableOpacity>
           <View>
-            <Text style={styles.envName}>{nome || 'Ambiente'}</Text>
+            <Text style={styles.envName}>{nome || 'Nome Ambiente'}</Text>
             <Text style={styles.envSub}>{caracteristicas.tipo} • {caracteristicas.andar}</Text>
           </View>
         </View>
 
-        {/* CARDS DE MÉTRICAS */}
-        <View style={styles.metricsGrid}>
-          <MetricCard label="Temperatura" value={sensores.temperatura} unit="°C" icon={<Thermometer color="#FFF" size={24} />} iconBg="#2563EB" />
-          <MetricCard label="Umidade" value={sensores.umidade} unit="%" icon={<Droplets color="#FFF" size={24} />} iconBg="#2563EB" />
-          <MetricCard label="CO₂" value={sensores.co2} unit="ppm" icon={<Atom color="#FFF" size={24} />} iconBg="#2563EB" />
-          <MetricCard label="Partículas" value={sensores.particulas} unit="µg/m²" icon={<Wind color="#FFF" size={24} />} iconBg="#2563EB" />
+        {/* CARDS DE MÉTRICAS (Atualizado com Luminosidade e Layout Centrado) */}
+        <View style={styles.metricsContainer}>
+          <View style={styles.metricsRow}>
+            <MetricCard label="Temperatura" value={sensores.temperatura} unit="°C" icon={<Thermometer color="#FFF" size={24} />} iconBg="#2563EB" />
+            <MetricCard label="Umidade" value={sensores.umidade} unit="%" icon={<Droplets color="#FFF" size={24} />} iconBg="#2563EB" />
+          </View>
+          <View style={styles.metricsCenter}>
+            <MetricCard label="luminosidade" value={sensores.luminosidade} unit="lux" icon={<Lightbulb color="#FFF" size={24} />} iconBg="#2563EB" />
+          </View>
         </View>
 
         {/* GRÁFICO CIRCULAR DE CONFORTO */}
@@ -266,10 +259,10 @@ export default function AmbienteDetalhes() {
           <Text style={[styles.statusMain, { color: getConfortoColor(sensores.indice_geral) }]}>
             {sensores.indice_geral >= 80 ? 'Excelente' : 'Regular'}
           </Text>
-          <Text style={styles.statusDetail}>Baseado em temperatura, umidade, CO₂ e qualidade do ar</Text>
+          <Text style={styles.statusDetail}>Baseado em temperatura, umidade, luminosidade e qualidade do ar</Text>
         </View>
 
-        {/* TABS CONTROLS */}
+        {/* TABS CONTROLS (Atualizado com Agendamentos) */}
         <View style={styles.tabContainer}>
           <TouchableOpacity style={[styles.tabItem, tab === 'historico' && styles.tabActive]} onPress={() => setTab('historico')}>
             <Text style={[styles.tabText, tab === 'historico' && styles.tabTextActive]}>Histórico</Text>
@@ -277,12 +270,14 @@ export default function AmbienteDetalhes() {
           <TouchableOpacity style={[styles.tabItem, tab === 'perifericos' && styles.tabActive]} onPress={() => setTab('perifericos')}>
             <Text style={[styles.tabText, tab === 'perifericos' && styles.tabTextActive]}>Periféricos</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.tabItem, tab === 'agendamentos' && styles.tabActive]} onPress={() => setTab('agendamentos')}>
+            <Text style={[styles.tabText, tab === 'agendamentos' && styles.tabTextActive]}>Agendamentos</Text>
+          </TouchableOpacity>
         </View>
 
         {/* CONTEÚDO DAS TABS */}
-        {tab === 'historico' ? (
+        {tab === 'historico' && (
           <View>
-            {/* GRÁFICO 1: TEMPERATURA E UMIDADE */}
             <View style={styles.cardMain}>
               <Text style={styles.cardTitle}>Histórico de Temperatura e Umidade</Text>
               <LineChart
@@ -305,15 +300,14 @@ export default function AmbienteDetalhes() {
               </View>
             </View>
 
-            {/* GRÁFICO 2: CO2 E QUALIDADE DO AR */}
+            {/* Gráfico 2 Atualizado para Luminosidade */}
             <View style={styles.cardMain}>
-              <Text style={styles.cardTitle}>Histórico de CO₂ e Partículas</Text>
+              <Text style={styles.cardTitle}>Histórico de Luminosidade</Text>
               <LineChart
                 data={{
                   labels: historyData.labels,
                   datasets: [
-                    { data: historyData.co2s, color: () => `#A855F7`, strokeWidth: 3 }, 
-                    { data: historyData.arQualidade, color: () => `#10B981`, strokeWidth: 3 }  
+                    { data: historyData.lumins, color: () => `#F59E0B`, strokeWidth: 3 }  
                   ]
                 }}
                 width={width - 80}
@@ -323,12 +317,13 @@ export default function AmbienteDetalhes() {
                 style={styles.chartStyle}
               />
               <View style={styles.legendRow}>
-                <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: '#A855F7'}]} /><Text style={styles.legendText}>CO₂</Text></View>
-                <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: '#10B981'}]} /><Text style={styles.legendText}>Partículas</Text></View>
+                <View style={styles.legendItem}><View style={[styles.dot, {backgroundColor: '#F59E0B'}]} /><Text style={styles.legendText}>Luminosidade</Text></View>
               </View>
             </View>
           </View>
-        ) : (
+        )}
+
+        {tab === 'perifericos' && (
           perifericosList.length > 0 ? (
             perifericosList.map((p, index) => (
               <View key={`${p.docId}-${p.nomeId}-${index}`} style={[styles.peripheralCard, { marginBottom: 15 }]}>
@@ -354,6 +349,14 @@ export default function AmbienteDetalhes() {
           ) : (
             <Text style={{textAlign: 'center', color: '#94A3B8', marginTop: 20}}>Nenhum periférico encontrado.</Text>
           )
+        )}
+
+        {/* Nova Aba de Agendamentos (Conforme Protótipo) */}
+        {tab === 'agendamentos' && (
+          <View style={styles.emptyScheduleCard}>
+            <Text style={styles.emptyScheduleTitle}>Nenhum agendamento no momento</Text>
+            <Text style={styles.emptyScheduleText}>Clique em Agendar Sala em “Ambientes”.</Text>
+          </View>
         )}
       </ScrollView>
 
@@ -421,11 +424,16 @@ const styles = StyleSheet.create({
   avatarCircle: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' },
   avatarText: { color: '#FFF', fontWeight: 'bold', fontSize: 13 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 15, paddingBottom: 100 },
-  titleSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 15 },
+  titleSection: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 15 },
   envName: { fontSize: 28, fontWeight: 'bold', color: '#1E293B' },
   envSub: { fontSize: 14, color: '#64748B' },
-  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
+  
+  // Layout atualizado para os Cards
+  metricsContainer: { gap: 12 },
+  metricsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  metricsCenter: { alignItems: 'center' },
   mCard: { backgroundColor: '#FFF', width: (width / 2) - 26, borderRadius: 24, padding: 16, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
+  
   mIconCircle: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   mLabel: { fontSize: 13, color: '#64748B' },
   mValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
@@ -438,11 +446,14 @@ const styles = StyleSheet.create({
   gaugeValue: { fontSize: 34, fontWeight: 'bold', color: '#1E293B' },
   statusMain: { fontSize: 20, fontWeight: 'bold', marginTop: 10 },
   statusDetail: { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 5, lineHeight: 18 },
+  
+  // Tabs atualizadas
   tabContainer: { flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 12, padding: 4, marginVertical: 20 },
   tabItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
   tabActive: { backgroundColor: '#FFF', elevation: 2 },
-  tabText: { fontSize: 14, color: '#64748B', fontWeight: '600' },
+  tabText: { fontSize: 12, color: '#64748B', fontWeight: '600' }, // Diminuí um pouco a fonte para caber 3 itens
   tabTextActive: { color: '#1E293B' },
+  
   chartStyle: { marginVertical: 10, borderRadius: 16, marginLeft: -10 },
   legendRow: { flexDirection: 'row', gap: 20, marginTop: 10 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -456,6 +467,12 @@ const styles = StyleSheet.create({
   cardSeparator: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 15 },
   footerBrand: { fontSize: 15, fontWeight: 'bold' },
   footerStatus: { fontSize: 12, color: '#94A3B8' },
+
+  // Estilos da aba de Agendamentos
+  emptyScheduleCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 30, alignItems: 'center', elevation: 2, marginVertical: 10 },
+  emptyScheduleTitle: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', marginBottom: 10, textAlign: 'center' },
+  emptyScheduleText: { fontSize: 14, color: '#64748B', textAlign: 'center' },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', flexDirection: 'row' },
   modalBackdrop: { flex: 0.2 },
   profileSheet: { flex: 0.8, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },

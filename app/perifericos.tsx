@@ -356,7 +356,7 @@ export default function PerifericosScreen() {
 
             {!isEditing && (
               <>
-                <Text style={styles.label}>Nome * (Chave no Banco de Dados)</Text>
+                <Text style={styles.label}>Nome *</Text>
                 <View style={styles.inputBox}>
                   <TextInput style={styles.input} placeholder="Ex: Ar Condicionado Principal" value={formNome} onChangeText={setFormNome} />
                 </View>
@@ -367,7 +367,7 @@ export default function PerifericosScreen() {
                   <ChevronDown color="#64748B" size={20} />
                 </TouchableOpacity>
 
-                <Text style={styles.label}>Tipo * (Documento no Banco de Dados)</Text>
+                <Text style={styles.label}>Tipo *</Text>
                 <View style={styles.inputBox}>
                   <TextInput style={styles.input} placeholder="Ex: arcondicionado, ventilador" value={formTipo} onChangeText={setFormTipo} />
                 </View>
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
   formSubtitle: { fontSize: 14, color: '#64748B', textAlign: 'center', marginBottom: 25 },
   label: { fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 8 },
   inputBox: { height: 55, borderWidth: 1.5, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  input: { flex: 1, height: '90%', fontSize: 15, color: '#000', outlineWidth: 0 },
+  input: { flex: 1, height: '90%', fontSize: 15, color: '#000', outlineWidth: 0, outlineColor:"transparent"},
   inputText: { fontSize: 15 },
   row: { flexDirection: 'row' },
   formButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 15 },
