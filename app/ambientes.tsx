@@ -128,7 +128,6 @@ export default function AmbientesScreen() {
                 nomeExibicao: amb.dados?.nome || docAmb.id.replace(/_/g, ' '),
                 temperatura: sensores.temperatura !== undefined ? `${sensores.temperatura}°` : '--',
                 umidade: sensores.umidade !== undefined ? `${sensores.umidade}%` : '--',
-                // ✅ AQI agora vem de sensores.AQI
                 co2: sensores.AQI !== undefined ? String(sensores.AQI) : '--',
                 tipo: amb.config?.tipo || amb.tipo || '',
                 area: amb.config?.area || amb.area || '',
@@ -165,12 +164,12 @@ export default function AmbientesScreen() {
 
     setIsSaving(true);
     try {
-      const novoId = formNome.trim().replace(/ /g, '_');
       const ambientesRef = collection(db, "empresas", empresaId, "ambientes");
 
       if (isEditing && selectedAmbiente) {
         const ambRef = doc(ambientesRef, selectedAmbiente.id);
         await updateDoc(ambRef, {
+          "dados.nome": formNome.trim(),
           "config.tipo": formTipo,
           "config.area": formArea || "0",
           "config.capacidade": formCapacidade || "0",
@@ -178,6 +177,7 @@ export default function AmbientesScreen() {
         });
         Alert.alert("Sucesso", "Ambiente atualizado!");
       } else {
+        const novoId = formNome.trim().replace(/ /g, '_');
         const snapshot = await getDocs(ambientesRef);
         const docs = snapshot.docs;
         
@@ -415,17 +415,13 @@ export default function AmbientesScreen() {
           <View style={styles.formCard}>
             <Text style={styles.formTitle}>{isEditing ? "Editar Ambiente" : "Novo Ambiente"}</Text>
             <Text style={styles.formSubtitle}>
-              {isEditing ? selectedAmbiente?.nomeExibicao : "Configure os dados do local"}
+              {isEditing ? "Edite os dados do ambiente" : "Configure os dados do local"}
             </Text>
 
-            {!isEditing && (
-              <>
-                <Text style={styles.label}>Nome do Ambiente *</Text>
-                <View style={styles.inputBox}>
-                  <TextInput style={styles.input} placeholder="Ex: Sala de Reunião" value={formNome} onChangeText={setFormNome} />
-                </View>
-              </>
-            )}
+            <Text style={styles.label}>Nome do Ambiente *</Text>
+            <View style={styles.inputBox}>
+              <TextInput style={styles.input} placeholder="Ex: Sala de Reunião" value={formNome} onChangeText={setFormNome} />
+            </View>
 
             <Text style={styles.label}>Tipo *</Text>
             <View style={styles.inputBox}>
@@ -554,7 +550,7 @@ export default function AmbientesScreen() {
         </View>
       </Modal>
 
-      {/* MODAL PERFIL */}
+      {/* MODAL PERFIL — lateral direita */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -708,9 +704,10 @@ const styles = StyleSheet.create({
   dropdownContainer: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginTop: -15, marginBottom: 18, elevation: 2 },
   dropdownItem: { padding: 15, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   dropdownText: { fontSize: 15, color: '#1E293B' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalBackdrop: { ...StyleSheet.absoluteFillObject },
-  profileSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, paddingBottom: 40, elevation: 20 },
+  // Modal perfil lateral direita
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
+  modalBackdrop: { flex: 0.15 },
+  profileSheet: { flex: 0.85, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },
   profileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 25 },
   profileTitle: { fontSize: 22, fontWeight: 'bold', color: '#1E293B' },
   profileUserInfo: { alignItems: 'center', marginBottom: 25 },

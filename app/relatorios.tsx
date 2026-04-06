@@ -32,7 +32,6 @@ import { LineChart } from "react-native-chart-kit";
 import { useRouter } from 'expo-router'; 
 import Svg, { Circle } from 'react-native-svg';
 
-// --- FIREBASE FIRESTORE MIGRATION ---
 import { auth, db } from '../services/firebaseConfig';
 import { signOut, onAuthStateChanged } from "firebase/auth";
 import { 
@@ -40,7 +39,10 @@ import {
   query, 
   where, 
   collectionGroup, 
-  getDocs 
+  getDocs,
+  orderBy,
+  limit,
+  onSnapshot
 } from "firebase/firestore";
 
 const { width } = Dimensions.get('window');
@@ -49,18 +51,31 @@ const LogoImg = require('../assets/images/logo.png');
 export default function RelatoriosScreen() {
   const router = useRouter();
   const [isProfileVisible, setIsProfileVisible] = useState(false);
-  
-  // Lógica do Gauge 
-  const indiceConforto = 70; 
-  const radius = 55;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (indiceConforto / 100) * circumference;
 
   const [userData, setUserData] = useState({ 
     nome: 'Carregando...', 
     email: '', 
     iniciais: '..' 
   });
+
+  // Dados do Firebase
+  const [indiceConforto, setIndiceConforto] = useState(0);
+  const [tempMedia, setTempMedia] = useState(0);
+  const [tempMin, setTempMin] = useState(0);
+  const [tempMax, setTempMax] = useState(0);
+  const [humMedia, setHumMedia] = useState(0);
+  const [humMin, setHumMin] = useState(0);
+  const [humMax, setHumMax] = useState(0);
+  const [chartLabels, setChartLabels] = useState<string[]>(["--"]);
+  const [chartTemps, setChartTemps] = useState<number[]>([0]);
+  const [chartHums, setChartHums] = useState<number[]>([0]);
+
+  // Lógica do Gauge — igual à tela ambiente
+  const radius = 55;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (indiceConforto / 100) * circumference;
+  const getConfortoColor = (val: number) => val >= 80 ? '#10B981' : val >= 50 ? '#F59E0B' : '#EF4444';
+  const getConfortoLabel = (val: number) => val >= 80 ? 'Excelente' : val >= 50 ? 'Regular' : 'Alerta';
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -70,15 +85,14 @@ export default function RelatoriosScreen() {
       }
 
       try {
-        // 1. Busca o documento do usuário em qualquer subcoleção 'usuarios'
         const userQuery = query(collectionGroup(db, 'usuarios'), where('userId', '==', user.uid));
         const userSnapshot = await getDocs(userQuery);
 
         if (!userSnapshot.empty) {
           const userDoc = userSnapshot.docs[0];
+          const foundEmpresaId = userDoc.ref.parent.parent?.id;
           const dataUser = userDoc.data();
           
-          // 2. Define os dados (usando o campo 'userName' padrão do Firestore)
           const nomeEncontrado = dataUser.userName || "Usuário";
           const iniciais = nomeEncontrado
             .split(' ')
@@ -93,6 +107,55 @@ export default function RelatoriosScreen() {
             email: user.email || "",
             iniciais: iniciais || "US"
           });
+
+          if (foundEmpresaId) {
+            // Listener dos últimos 6 registros do historico_geral
+            const historicoQuery = query(
+              collection(db, "empresas", foundEmpresaId, "historico_geral"),
+              orderBy("timestamp", "desc"),
+              limit(6)
+            );
+
+            const unsubHistorico = onSnapshot(historicoQuery, (snap) => {
+              if (snap.empty) return;
+
+              // Índice de conforto: pega o mais recente
+              const maisRecente = snap.docs[0].data();
+              setIndiceConforto(maisRecente.indice_conforto || 0);
+
+              // Coleta os 6 documentos para calcular médias, min, max e gráfico
+              const docs = snap.docs.map(d => d.data());
+
+              // Temperatura
+              const temps = docs.map(d => Number(d.temperatura_media || 0));
+              const tMedia = Math.round(temps.reduce((a, b) => a + b, 0) / temps.length);
+              const tMin = Math.min(...temps);
+              const tMax = Math.max(...temps);
+              setTempMedia(tMedia);
+              setTempMin(tMin);
+              setTempMax(tMax);
+
+              // Umidade
+              const hums = docs.map(d => Number(d.indice_conforto || 0));
+              // Caso tenha campo de umidade separado, use-o; caso contrário, usa indice_conforto como proxy
+              // Ajuste abaixo se o campo de umidade tiver outro nome no seu Firestore
+              const humDocs = docs.map(d => Number(d.umidade_media ?? d.indice_conforto ?? 0));
+              const hMedia = Math.round(humDocs.reduce((a, b) => a + b, 0) / humDocs.length);
+              const hMin = Math.min(...humDocs);
+              const hMax = Math.max(...humDocs);
+              setHumMedia(hMedia);
+              setHumMin(hMin);
+              setHumMax(hMax);
+
+              // Gráfico — ordem cronológica (do mais antigo ao mais recente)
+              const docsOrdenados = snap.docs.map(d => d.data()).reverse();
+              setChartLabels(docsOrdenados.map(d => d.hora || "--"));
+              setChartTemps(docsOrdenados.map(d => Number(d.temperatura_media || 0)));
+              setChartHums(docsOrdenados.map(d => Number(d.umidade_media ?? d.indice_conforto ?? 0)));
+            });
+
+            return () => unsubHistorico();
+          }
         }
       } catch (error) {
         console.error("Erro ao buscar dados do usuário:", error);
@@ -135,6 +198,7 @@ export default function RelatoriosScreen() {
           <Text style={styles.headerSubtitle}>Análise inteligente dos seus ambientes</Text>
         </View>
 
+        {/* Filtros desativados — apenas visual */}
         <View style={styles.selectorsRow}>
           <TouchableOpacity style={styles.dropdown}>
             <Text style={styles.dropdownText}>Todos os ambientes</Text>
@@ -155,7 +219,7 @@ export default function RelatoriosScreen() {
               <Circle cx="70" cy="70" r={radius} stroke="#F1F5F9" strokeWidth="12" fill="none" />
               <Circle
                 cx="70" cy="70" r={radius}
-                stroke="#10B981"
+                stroke={getConfortoColor(indiceConforto)}
                 strokeWidth="12"
                 fill="none"
                 strokeDasharray={circumference}
@@ -169,7 +233,9 @@ export default function RelatoriosScreen() {
             </View>
           </View>
 
-          <Text style={styles.statusMain}>Excelente</Text>
+          <Text style={[styles.statusMain, { color: getConfortoColor(indiceConforto) }]}>
+            {getConfortoLabel(indiceConforto)}
+          </Text>
           <Text style={styles.statusDetail}>Baseado em temperatura, umidade, CO₂ e qualidade do ar</Text>
         </View>
 
@@ -177,8 +243,18 @@ export default function RelatoriosScreen() {
         <View style={styles.cardMain}>
           <Text style={styles.cardTitle}>Resumo do Período</Text>
           <View style={styles.metricsGrid}>
-            <SummaryCard label="24.5°C" sub="Min: 22.8° | Max: 27.1°" icon={<Thermometer color="#EF4444" size={20}/>} bgColor="#FFF1F2" />
-            <SummaryCard label="43%" sub="Min: 32% | Max: 55%" icon={<Droplets color="#3B82F6" size={20}/>} bgColor="#EFF6FF" />
+            <SummaryCard 
+              label={`${tempMedia}°C`} 
+              sub={`Min: ${tempMin}° | Max: ${tempMax}°`} 
+              icon={<Thermometer color="#EF4444" size={20}/>} 
+              bgColor="#FFF1F2" 
+            />
+            <SummaryCard 
+              label={`${humMedia}%`} 
+              sub={`Min: ${humMin}% | Max: ${humMax}%`} 
+              icon={<Droplets color="#3B82F6" size={20}/>} 
+              bgColor="#EFF6FF" 
+            />
             <SummaryCard label="Bom" sub="Qualidade do Ar" icon={<Wind color="#8B5CF6" size={20}/>} bgColor="#F5F3FF" />
             <SummaryCard label="Estável" sub="Tendência" icon={<TrendingUp color="#10B981" size={20}/>} bgColor="#ECFDF5" />
           </View>
@@ -189,14 +265,23 @@ export default function RelatoriosScreen() {
           <Text style={styles.cardTitle}>Histórico de Temperatura e Umidade</Text>
           <LineChart
             data={{
-              labels: ["06:00", "06:00", "07:00", "05:00"],
+              labels: chartLabels,
               datasets: [
-                { data: [55, 35, 48, 38], color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`, strokeWidth: 3 },
-                { data: [25, 28, 24, 26], color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`, strokeWidth: 3 }
+                { 
+                  data: chartTemps.length > 0 ? chartTemps : [0], 
+                  color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`, 
+                  strokeWidth: 3 
+                },
+                { 
+                  data: chartHums.length > 0 ? chartHums : [0], 
+                  color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`, 
+                  strokeWidth: 3 
+                }
               ]
             }}
             width={width - 80}
             height={200}
+            fromZero={true}
             chartConfig={chartConfig}
             bezier
             style={styles.chartStyle}
@@ -210,7 +295,7 @@ export default function RelatoriosScreen() {
         <View style={{height: 100}} /> 
       </ScrollView>
 
-      {/* --- MODAL DE PERFIL --- */}
+      {/* --- MODAL DE PERFIL — lateral direita --- */}
       <Modal animationType="fade" transparent visible={isProfileVisible} onRequestClose={() => setIsProfileVisible(false)}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -250,7 +335,6 @@ export default function RelatoriosScreen() {
   );
 }
 
-// --- COMPONENTES AUXILIARES ---
 function SummaryCard({ label, sub, icon, bgColor }: any) {
   return (
     <View style={[styles.summaryCard, { backgroundColor: bgColor }]}>
@@ -295,15 +379,12 @@ const styles = StyleSheet.create({
   selectorsRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
   dropdown: { flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 5, elevation: 3 },
   dropdownText: { fontSize: 13, color: '#1E293B', fontWeight: '500' },
-  
-  // GAUGE STYLES
   cardMain: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, marginBottom: 20, alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 5 },
   cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1E293B', alignSelf: 'flex-start', marginBottom: 20 },
   gaugeContainer: { width: 140, height: 140, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   gaugeTextContainer: { position: 'absolute', justifyContent: 'center', alignItems: 'center' },
   gaugeValue: { fontSize: 34, fontWeight: 'bold', color: '#1E293B' },
-  
-  statusMain: { fontSize: 20, fontWeight: 'bold', color: '#10B981', marginTop: 10 },
+  statusMain: { fontSize: 20, fontWeight: 'bold', marginTop: 10 },
   statusDetail: { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 5, lineHeight: 18 },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: '100%' },
   summaryCard: { width: '48%', padding: 18, borderRadius: 20, gap: 8 },
@@ -317,9 +398,9 @@ const styles = StyleSheet.create({
   bottomTab: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, backgroundColor: '#FFF', flexDirection: 'row', borderTopWidth: 1, borderColor: '#E2E8F0', paddingBottom: 20 },
   tabItem: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   activeIndicator: { position: 'absolute', bottom: 12, width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#2563EB' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', flexDirection: 'row' },
-  modalBackdrop: { flex: 0.2 },
-  profileSheet: { flex: 0.8, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
+  modalBackdrop: { flex: 0.15 },
+  profileSheet: { flex: 0.85, backgroundColor: '#FFF', padding: 24, paddingTop: 60, borderTopLeftRadius: 30, borderBottomLeftRadius: 30 },
   profileHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 40 },
   profileTitle: { fontSize: 24, fontWeight: 'bold' },
   profileUserInfo: { alignItems: 'center', marginBottom: 20 },

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, ScrollView,
-  TouchableOpacity, Dimensions, Image, Modal, Pressable,
-  Alert, TextInput, ActivityIndicator, FlatList
+  View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity,
+  Dimensions, Image, Modal, Pressable, Alert, TextInput, ActivityIndicator,
+  FlatList, Animated
 } from 'react-native';
-import {
-  Bell, RefreshCw, Plus, Thermometer, Droplets, Wind,
-  LayoutGrid, Building2, Zap, BarChart3, ChevronRight,
-  FileText, X, User, LogOut, ChevronDown, Edit2, Trash2, Sun
+import { 
+  Bell, Plus, Zap, Building2, BarChart3, FileText,
+  RefreshCw, Thermometer, Droplets, Wind, LayoutGrid,
+  X, User, LogOut, ChevronRight, ChevronDown, Edit2, Trash2, Sun
 } from 'lucide-react-native';
 import { LineChart } from "react-native-chart-kit";
 import Svg, { Circle } from 'react-native-svg';
@@ -36,7 +36,6 @@ interface AmbienteData {
   andar?: string;
 }
 
-// --- GAUGE QUALIDADE AR ---
 function AqiGauge({ value }: { value: number }) {
   const size = 200;
   const strokeWidth = 16;
@@ -127,7 +126,6 @@ export default function DashboardScreen() {
           .map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
         setUserData({ nome: nomeEncontrado, email: user.email || "", iniciais });
 
-        // --- LISTENER AMBIENTES ---
         unsubAmbientes = onSnapshot(collection(db, "empresas", empresaId, "ambientes"), (snap) => {
           const lista: AmbienteData[] = [];
           snap.forEach((docAmb) => {
@@ -136,11 +134,9 @@ export default function DashboardScreen() {
             const sensores = amb.sensores || {};
             lista.push({
               id: docAmb.id,
-              // Usa amb.dados.nome se existir, senão formata o ID
               nomeExibicao: amb.dados?.nome || docAmb.id.replace(/_/g, ' '),
               temperatura: Number(sensores.temperatura || 0),
               umidade: Number(sensores.umidade || 0),
-              // AQI vem de sensores.AQI (igual à tela Ambientes)
               aqi: Number(sensores.AQI || 0),
               tipo: amb.config?.tipo || amb.tipo || '',
               area: amb.config?.area || amb.area || '',
@@ -154,7 +150,6 @@ export default function DashboardScreen() {
           setMedias(prev => ({ ...prev, hum: hMedia }));
         });
 
-        // --- LISTENER HISTÓRICO ---
         const historicoQuery = query(
           collection(db, "empresas", empresaId, "historico_geral"),
           orderBy("timestamp", "desc"), limit(6)
@@ -187,7 +182,6 @@ export default function DashboardScreen() {
     };
   }, [refreshKey]);
 
-  // --- SALVAR NOVO AMBIENTE (mesma estrutura da tela Ambientes) ---
   const handleSalvarNovoAmbiente = async () => {
     if (!formNome.trim() || !formTipo.trim() || !formAndar.trim()) {
       Alert.alert("Campos Obrigatórios", "Preencha Nome, Tipo e Andar.");
@@ -200,7 +194,6 @@ export default function DashboardScreen() {
       const novoId = formNome.trim().replace(/ /g, '_');
       const ambientesRef = collection(db, "empresas", userEmpresaId, "ambientes");
 
-      // Verifica se só existe o Ambiente_1 placeholder e remove
       const snapshot = await getDocs(ambientesRef);
       const docs = snapshot.docs;
       if (docs.length === 1 && docs[0].id === 'Ambiente_1') {
@@ -229,7 +222,6 @@ export default function DashboardScreen() {
         },
       });
 
-      // Subcoleções obrigatórias
       await setDoc(doc(collection(novoAmbRef, "historico"), "registro_inicial"), {
         timestamp: new Date().toISOString(),
         temperatura: 0, umidade: 0, luminosidade: 0, indice_conforto: 0
@@ -251,13 +243,17 @@ export default function DashboardScreen() {
     } finally { setIsSaving(false); }
   };
 
-  // --- ATUALIZAR AMBIENTE (mesma lógica da tela Ambientes) ---
   const handleUpdateAmbiente = async () => {
+    if (!formNome.trim() || !formTipo.trim() || !formAndar.trim()) {
+      Alert.alert("Campos Obrigatórios", "Preencha Nome, Tipo e Andar.");
+      return;
+    }
     if (!selectedAmbiente || !userEmpresaId) return;
     setIsSaving(true);
     try {
       const ambRef = doc(db, "empresas", userEmpresaId, "ambientes", selectedAmbiente.id);
       await updateDoc(ambRef, {
+        "dados.nome": formNome.trim(),
         "config.tipo": formTipo,
         "config.area": formArea || "0",
         "config.capacidade": formCapacidade || "0",
@@ -270,7 +266,6 @@ export default function DashboardScreen() {
     finally { setIsSaving(false); }
   };
 
-  // --- ABRIR EDIÇÃO (igual handleOpenEdit da tela Ambientes) ---
   const handleOpenEdit = (item: AmbienteData) => {
     setSelectedAmbiente(item);
     setFormNome(item.nomeExibicao);
@@ -302,7 +297,6 @@ export default function DashboardScreen() {
     catch (e) { Alert.alert("Erro", "Falha ao sair."); }
   };
 
-  // --- GRÁFICO: fromZero garante eixo Y a partir do 0 ---
   const chartData = {
     labels: chartDataState.labels.length > 0 ? chartDataState.labels : ["--"],
     datasets: [
@@ -322,7 +316,6 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* HEADER */}
       <View style={styles.topAppBar}>
         <Image source={LogoImg} style={styles.topLogo} resizeMode="contain" />
         <View style={styles.headerIcons}>
@@ -341,7 +334,6 @@ export default function DashboardScreen() {
           <Text style={styles.headerSubtitle}>Visão geral de seus ambientes</Text>
         </View>
 
-        {/* AÇÕES */}
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.btnSecondary} onPress={() => setRefreshKey(k => k + 1)}>
             <RefreshCw color="#000" size={18} /><Text style={styles.btnSecondaryText}>Atualizar</Text>
@@ -351,7 +343,6 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* MÉTRICAS */}
         <View style={styles.metricsGrid}>
           <MetricCard label="Temp. Média" value={`${medias.temp}`} unit="°C"
             icon={<Thermometer color="#FFF" size={28} />} iconBg="#2563EB" />
@@ -363,7 +354,6 @@ export default function DashboardScreen() {
             icon={<Building2 color="#FFF" size={28} />} iconBg="#2563EB" />
         </View>
 
-        {/* GRÁFICO */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Histórico das Últimas Horas</Text>
           <LineChart
@@ -387,13 +377,11 @@ export default function DashboardScreen() {
           />
         </View>
 
-        {/* GAUGE */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitleCenter}>Qualidade do Ar Geral</Text>
           <AqiGauge value={medias.qualidadeAr} />
         </View>
 
-        {/* LISTA AMBIENTES */}
         <View style={styles.listHeader}>
           <Text style={styles.sectionTitle}>Seus Ambientes</Text>
           <TouchableOpacity onPress={() => router.push('/ambientes')}>
@@ -440,19 +428,14 @@ export default function DashboardScreen() {
             <View style={styles.formCard}>
               <Text style={styles.formTitle}>{isEditing ? 'Editar Ambiente' : 'Novo Ambiente'}</Text>
               <Text style={styles.formSubtitle}>
-                {isEditing ? selectedAmbiente?.nomeExibicao : 'Adicione um novo ambiente para monitorar'}
+                {isEditing ? 'Edite os dados do ambiente' : 'Adicione um novo ambiente para monitorar'}
               </Text>
 
-              {/* Nome só aparece na criação */}
-              {!isEditing && (
-                <>
-                  <Text style={styles.label}>Nome do Ambiente *</Text>
-                  <View style={styles.inputBox}>
-                    <TextInput style={styles.input} placeholder="Ex: Sala de Reunião 1"
-                      value={formNome} onChangeText={setFormNome} />
-                  </View>
-                </>
-              )}
+              <Text style={styles.label}>Nome do Ambiente *</Text>
+              <View style={styles.inputBox}>
+                <TextInput style={styles.input} placeholder="Ex: Sala de Reunião 1"
+                  value={formNome} onChangeText={setFormNome} />
+              </View>
 
               <Text style={styles.label}>Tipo *</Text>
               <View style={styles.inputBox}>
@@ -501,7 +484,7 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
-      {/* MODAL PERFIL */}
+      {/* MODAL PERFIL — lateral direita */}
       <Modal animationType="fade" transparent={true} visible={isProfileVisible}>
         <View style={styles.modalOverlay}>
           <Pressable style={styles.modalBackdrop} onPress={() => setIsProfileVisible(false)} />
@@ -540,7 +523,6 @@ export default function DashboardScreen() {
         </View>
       </Modal>
 
-      {/* BOTTOM TAB */}
       <View style={styles.bottomTab}>
         <TabItem icon={<FileText size={24} color="#2563EB" />} active />
         <TabItem icon={<Building2 size={24} color="#64748B" />} onPress={() => router.push('/ambientes')} />
@@ -552,7 +534,6 @@ export default function DashboardScreen() {
   );
 }
 
-// --- SUB-COMPONENTES ---
 function MetricCard({ label, value, unit, icon, iconBg }: any) {
   return (
     <View style={styles.metricCard}>
